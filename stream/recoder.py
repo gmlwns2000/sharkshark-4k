@@ -10,6 +10,7 @@ MARU = 'https://www.twitch.tv/maoruya'
 
 @dataclass
 class RecoderEntry:
+    index: int
     audio_segment: np.ndarray
     frames: np.ndarray
     fps: float
@@ -41,8 +42,8 @@ class TwitchRecoder:
         )
 
         t = time.time()
-        t_sum = 0
-        t_count = 0
+        t_sum = []
+        index = 0
         while True:
             audio_segment = audio_grabber.grab()
             frames = []
@@ -50,15 +51,19 @@ class TwitchRecoder:
                 frame = image_grabber.grab()
                 frames.append(frame)
             frames = np.stack(frames, axis=0)
-            t_sum += time.time()-t
-            t_count += 1
-            print('queue took', t_sum/t_count, audio_segment.shape, frames.shape)
+            t_sum.append(time.time()-t)
+            if len(t_sum) > 100:
+                t_sum.pop(0)
+            t_avg = sum(t_sum)/len(t_sum)
+            print(f'TwitchRecoder: batch[{index}] captured took average {t_avg:.2f} sec. Audio[{audio_segment.shape}] Video[{frames.shape}]')
             t = time.time()
             self.queue.put(RecoderEntry(
+                index=index,
                 audio_segment=audio_segment,
                 frames=frames,
                 fps=self.fps
             ))
+            index += 1
         
         image_grabber.terminate()
         audio_grabber.terminate()
@@ -66,6 +71,9 @@ class TwitchRecoder:
     def start(self):
         self.proc = mp.Process(target=self.proc, daemon=True)
         self.proc.start()
+    
+    def get(self) -> RecoderEntry:
+        return self.queue.get()
     
     def join(self):
         self.proc.join()
