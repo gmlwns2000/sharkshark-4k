@@ -49,15 +49,16 @@ class TwitchRecoder:
             for i in range(self.batch_sec * self.fps):
                 frame = image_grabber.grab()
                 frames.append(frame)
+            frames = np.stack(frames, axis=0)
+            t_sum += time.time()-t
+            t_count += 1
+            print('queue took', t_sum/t_count, audio_segment.shape, frames.shape)
+            t = time.time()
             self.queue.put(RecoderEntry(
                 audio_segment=audio_segment,
                 frames=frames,
                 fps=self.fps
             ))
-            t_sum += time.time()-t
-            t_count += 1
-            print('queue took', t_sum/t_count, audio_segment.shape, frames.shape)
-            t = time.time()
         
         image_grabber.terminate()
         audio_grabber.terminate()
