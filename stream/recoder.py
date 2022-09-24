@@ -1,7 +1,8 @@
 from dataclasses import dataclass
+from queue import Empty
 from twitchrealtimehandler import (TwitchAudioGrabber,
                                    TwitchImageGrabber)
-import cv2, time
+import cv2, time, os
 import numpy as np
 import multiprocessing as mp
 
@@ -22,6 +23,7 @@ class TwitchRecoder:
         self.batch_sec = batch_sec
         self.fps = fps
         self.queue = mp.Queue(maxsize=100)
+        self.cmd_queue = mp.Queue()
     
     def proc(self):
         # change to a stream that is actually online
@@ -45,6 +47,16 @@ class TwitchRecoder:
         t_sum = []
         index = 0
         while True:
+            try:
+                cmd = self.cmd_queue.get_nowait()
+                if cmd == 'exit':
+                    print('TwitchRecoder: Get exit')
+                    self.cmd_queue.close()
+                    break
+                else: raise Exception()
+            except Empty:
+                pass
+            
             audio_segment = audio_grabber.grab()
             frames = []
             for i in range(self.batch_sec * self.fps):
@@ -59,15 +71,20 @@ class TwitchRecoder:
             t = time.time()
             self.queue.put(RecoderEntry(
                 index=index,
-                audio_segment=audio_segment,
-                frames=frames,
+                audio_segment=audio_segment, #(22000,2)
+                frames=frames, #(24, 1080, 1920,3) -> (24, 2160, 3840, 3)
                 fps=self.fps
             ))
             index += 1
         
+        print('TwitchRecoder: try term img')
         image_grabber.terminate()
+        print('TwitchRecoder: try term audio')
         audio_grabber.terminate()
+        print('TwitchRecoder: exit subproc')
 
+        os.kill(os.getpid(), 9)
+    
     def start(self):
         self.proc = mp.Process(target=self.proc, daemon=True)
         self.proc.start()
@@ -75,11 +92,30 @@ class TwitchRecoder:
     def get(self) -> RecoderEntry:
         return self.queue.get()
     
+    def stop(self):
+        self.cmd_queue.put("exit")
+        self.queue.close()
+        print('TwitchRecoder: joining all subprocs')
+        self.join()
+        print('TwitchRecoder: joined subprocs')
+
     def join(self):
         self.proc.join()
 
 if __name__ == '__main__':
     print('asdf')
-    recoder = TwitchRecoder()
+    recoder = TwitchRecoder(target_url='https://www.twitch.tv/gosegugosegu')
     recoder.start()
-    recoder.join()
+
+    time.sleep(3)
+
+    if not os.path.exists('./saves/frames/'): os.mkdir('./saves/frames/')
+    j = 0
+    for i in range(10):
+        batch = recoder.queue.get(timeout=3) #type: RecoderEntry
+        for k in range(batch.frames.shape[0]):
+            cv2.imwrite(f"saves/frames/{j:04}.png", cv2.cvtColor(batch.frames[k], cv2.COLOR_RGB2BGR))
+            j += 1
+        print(f"{i} batch get. {batch.frames.shape}")
+        
+    recoder.stop()
