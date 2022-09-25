@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from queue import Empty
-from twitchrealtimehandler import (TwitchAudioGrabber,
+from twitch_realtime_handler import (TwitchAudioGrabber,
                                    TwitchImageGrabber)
 import cv2, time, os
 import numpy as np
