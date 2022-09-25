@@ -7,6 +7,8 @@ from twitchstream.chat import TwitchChatStream
 from upscale.base_service import BaseService
 from env_var import *
 import numpy as np
+import multiprocessing as mp
+import cv2
 
 @dataclass
 class TwitchStreamerEntry:
@@ -16,7 +18,7 @@ class TwitchStreamerEntry:
 
 class TwitchStreamer(BaseService):
     def __init__(self, 
-        resolution=(2160,3840), fps=24, 
+        resolution=(1080,1920), fps=24, 
         streamkey=TWITCH_STREAMKEY, oauth=TWITCH_OAUTH, username=TWITCH_USERNAME,
         on_queue=None
     ) -> None:
@@ -36,7 +38,7 @@ class TwitchStreamer(BaseService):
             height=self.resolution[0],
             fps=self.fps,
             enable_audio=True,
-            verbose=True
+            verbose=False
         ) as videostream:
         # TwitchChatStream(
         #     username=self.username.lower(),  # Must provide a lowercase username.
@@ -51,62 +53,34 @@ class TwitchStreamer(BaseService):
             self.proc_main()
 
     def proc_init(self):
-        self.frame_queue = queue.Queue(maxsize=int(self.fps*30))
-        self.audio_queue = queue.Queue(maxsize=30)
-        self.thread = threading.Thread(target=self.streaming_thread, daemon=True)
-        self.thread.start()
-    
-    def streaming_thread(self):
-        frequency = 100
-        last_phase = 0
-        last_frame_warn = 0
-
-        while True:
-            #manage stream
-            videostream = self.videostream
-            chatstream = self.chatstream
-            if videostream is None:
-                print("TwitchStreamer.thread: Thread exit")
-                return
-
-            #received = chatstream.twitch_receive_messages()
-            received = False
-
-            # process all the messages
-            if received:
-                for chat_message in received:
-                    print(f"TwitchStramer.thread: Got a message '{chat_message['message']}' from {chat_message['username']}")
-
-            if videostream.get_video_frame_buffer_state() < 30:
-                try:
-                    frame = self.frame_queue.get_nowait()
-                    videostream.send_video_frame(frame)
-                    print('frame sent')
-                except queue.Empty:
-                    if (time.time() - last_frame_warn) > 3:
-                        print("TwitchStreamer: [W] frame needed, but not supplied")
-                        last_frame_warn = time.time()
-            elif videostream.get_audio_buffer_state() < 30:
-                x = np.linspace(last_phase,
-                                last_phase +
-                                frequency*2*np.pi/videostream.fps,
-                                int(44100 / videostream.fps) + 1)
-                last_phase = x[-1]
-                audio = np.sin(x[:-1])
-                videostream.send_audio(audio, audio)
-            else:
-                time.sleep(.001)
+        self.frequency = 100
+        self.last_phase = 0
+        self.last_frame_warn = 0
     
     def proc_job_recieved(self, job:TwitchStreamerEntry):
+        #manage stream
+        videostream = self.videostream
+        chatstream = self.chatstream
+        if videostream is None:
+            print("TwitchStreamer.thread: Thread exit")
+            return job
+        
         #push received job into queue
-        if job.step > self.last_step:
+        if job.step < self.last_step:
             print('TwitchStreamer: [W] Job is queued with incorrect order.')
+        
         for i in range(len(job.frames)):
             frame = job.frames[i]
             if isinstance(frame, torch.Tensor):
                 frame = frame.numpy().astype(np.uint8)
-            self.frame_queue.put(frame)
-        self.audio_queue.put(job.audio_segments)
+            if frame.shape != (*self.resolution, 3):
+                frame = cv2.resize(frame, dsize=(self.resolution[1], self.resolution[0]), interpolation=cv2.INTER_AREA)
+            frame = frame.astype(np.float32) / 255.0
+            #print('frame stat', np.min(frame), np.max(frame), frame.dtype, frame.shape)
+            videostream.send_video_frame(frame)
+        
+        videostream.send_audio(job.audio_segments[:,0], job.audio_segments[:,1])
+
         self.last_step = job.step
         
         return job
@@ -114,18 +88,23 @@ class TwitchStreamer(BaseService):
     def proc_cleanup(self):
         self.chatstream = None
         self.videostream = None
-        self.thread.join(timeout=15)
 
 if __name__ == '__main__':
-    streamer = TwitchStreamer()
+    def on_queue(entry:TwitchStreamerEntry):
+        print('Streamer: entry processed', entry.step)
+    streamer = TwitchStreamer(on_queue=on_queue, fps=24)
     streamer.start()
 
-    for i in range(1200):
+    from .recoder import TwitchRecoder, RecoderEntry, TW_MARU, TW_PIANOCAT
+    def on_queue_recoder(entry:RecoderEntry):
         streamer.push_job(TwitchStreamerEntry(
-            frames=(np.ones((*streamer.resolution, 3), dtype=np.float32) * (i%255)).astype(np.uint8),
-            audio_segments=None,
-            step=i,
-        ), timeout=60)
+            frames=entry.frames,
+            audio_segments=entry.audio_segment,
+            step=entry.index
+        ))
+    
+    recoder = TwitchRecoder(target_url=TW_MARU, fps=24, on_queue=on_queue_recoder)
+    recoder.start()
 
-    streamer.wait_for_job_clear()
-    streamer.stop()
+    recoder.join()
+    streamer.join()

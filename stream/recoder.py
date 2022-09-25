@@ -24,7 +24,7 @@ class TwitchRecoder:
         self.url = target_url
         self.batch_sec = batch_sec
         self.fps = fps
-        self.queue = mp.Queue(maxsize=100)
+        self.queue = mp.Queue(maxsize=8)
         self.cmd_queue = mp.Queue()
         self.on_queue = on_queue
     
@@ -36,15 +36,17 @@ class TwitchRecoder:
 
     def proc(self):
         # change to a stream that is actually online
+        print('TwitchRecoder: TwitchAudioGrabber init')
         audio_grabber = TwitchAudioGrabber(
             twitch_url=self.url,
             blocking=True,  # wait until a segment is available
             segment_length=int(self.batch_sec),  # segment length in seconds
-            rate=44000,  # sampling rate of the audio
+            rate=44100,  # sampling rate of the audio
             channels=2,  # number of channels
-            dtype=np.int32  # quality of the audio could be [np.int16, np.int32, np.float32, np.float64]
+            dtype=np.float32  # quality of the audio could be [np.int16, np.int32, np.float32, np.float64]
         )
 
+        print('TwitchRecoder: TwitchImageGrabber init')
         image_grabber = TwitchImageGrabber(
             twitch_url=self.url,
             quality="1080p60",  # quality of the stream could be ["160p", "360p", "480p", "720p", "720p60", "1080p", "1080p60"]
@@ -66,7 +68,9 @@ class TwitchRecoder:
             except Empty:
                 pass
             
+            #print('f')
             audio_segment = audio_grabber.grab()
+            #print('ff')
             frames = []
             for i in range(self.batch_sec * self.fps):
                 frame = image_grabber.grab()
@@ -120,7 +124,7 @@ class TwitchRecoder:
 
 if __name__ == '__main__':
     print('asdf')
-    recoder = TwitchRecoder(target_url='https://www.twitch.tv/gosegugosegu')
+    recoder = TwitchRecoder(target_url=TW_MARU)
     recoder.start()
 
     time.sleep(3)
@@ -128,7 +132,7 @@ if __name__ == '__main__':
     if not os.path.exists('./saves/frames/'): os.mkdir('./saves/frames/')
     j = 0
     for i in range(10):
-        batch = recoder.queue.get(timeout=3) #type: RecoderEntry
+        batch = recoder.queue.get(timeout=30) #type: RecoderEntry
         for k in range(batch.frames.shape[0]):
             cv2.imwrite(f"saves/frames/{j:04}.png", cv2.cvtColor(batch.frames[k], cv2.COLOR_RGB2BGR))
             j += 1

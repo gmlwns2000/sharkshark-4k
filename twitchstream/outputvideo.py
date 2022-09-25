@@ -121,14 +121,14 @@ class TwitchOutputStream(object):
             # VIDEO CODEC PARAMETERS
             '-vcodec', 'libx264',
             '-r', '%d' % self.fps,
-            '-b:v', '3000k',
+            '-b:v', '15000k',
             '-s', '%dx%d' % (self.width, self.height),
             '-preset', 'faster', '-tune', 'zerolatency',
-            '-crf', '23',
+            '-crf', '16',
             '-pix_fmt', 'yuv420p',
             # '-force_key_frames', r'expr:gte(t,n_forced*2)',
-            '-minrate', '3000k', '-maxrate', '3000k',
-            '-bufsize', '12000k',
+            '-minrate', '3000k', '-maxrate', '15000k',
+            '-bufsize', '75000k',
             '-g', '60',     # key frame distance
             '-keyint_min', '1',
             # '-filter:v "setpts=0.25*PTS"'
@@ -153,7 +153,7 @@ class TwitchOutputStream(object):
             '-map', '0:v', '-map', '1:a',
 
             # NUMBER OF THREADS
-            '-threads', '2',
+            '-threads', '16',
 
             # STREAM TO TWITCH
             '-f', 'flv', self.get_closest_ingest(),
@@ -325,7 +325,7 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
         self.last_frame_time = None
         self.next_video_send_time = None
         self.frame_counter = 0
-        self.q_video = queue.PriorityQueue()
+        self.q_video = queue.PriorityQueue(maxsize=60*5)
 
         # don't call the functions directly, as they block on the first
         # call

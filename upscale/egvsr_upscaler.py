@@ -182,6 +182,7 @@ class EgvsrUpscalerService(BaseUpscalerService):
             for i in range(N):
                 hr = self.upscale_single(frames[i])
                 hrs.append(hr)
+            hrs = torch.stack(hrs, dim=0).to('cpu', non_blocking=True)
             return hrs
         else: 
             raise Exception(frames.shape)
@@ -201,7 +202,7 @@ class EgvsrUpscalerService(BaseUpscalerService):
             self.hr_prev = hr_curr
             self.lr_prev = lr_curr
 
-            return (torch.clamp(hr_curr, 0, 1) * 255).detach()[0].permute(1,2,0).to('cpu', non_blocking=True)
+            return (torch.clamp(hr_curr, 0, 1) * 255).detach()[0].permute(1,2,0)
         
 if __name__ == '__main__':
     import os

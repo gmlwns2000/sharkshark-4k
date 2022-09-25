@@ -92,6 +92,7 @@ class TwitchImageGrabber(_TwitchHandlerVideo, _TwitchHandlerGrabber):
                           "-s", "{}x{}".format(self.width, self.height),
                           "-vcodec", "rawvideo",
                           "-"]
+        print('TwitchImageGrabber cmd:', ' '.join(self._cmd_pipe))
         self._n_bytes_per_payload = self.width*self.height*3
         self._reshape_size = [self.height, self.width, 3]
         if self._auto_start:

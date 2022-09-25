@@ -7,8 +7,8 @@ class BaseService(metaclass=abc.ABCMeta):
     on_queue = None
 
     def __init__(self) -> None:
-        self.job_queue = mp.Queue(maxsize=100)
-        self.result_queue = mp.Queue(maxsize=100)
+        self.job_queue = mp.Queue(maxsize=3)
+        self.result_queue = mp.Queue(maxsize=3)
         self.cmd_queue = mp.Queue(maxsize=4096)
         self.proc = mp.Process(target=self.proc_pre_main, daemon=True)
     
@@ -57,6 +57,9 @@ class BaseService(metaclass=abc.ABCMeta):
 
     def push_job(self, entry, timeout=10):
         self.job_queue.put(entry, timeout=timeout)
+    
+    def push_job_nowait(self, entry):
+        self.job_queue.put_nowait(entry)
 
     def get_result(self, timeout=10):
         entry = self.result_queue.get(timeout=timeout)
