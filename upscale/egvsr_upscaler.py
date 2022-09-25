@@ -169,10 +169,26 @@ class EgvsrUpscalerService(BaseUpscalerService):
     def proc_cleanup(self):
         pass
     
-    def upscale(self, img: torch.Tensor):
-        assert isinstance(img, torch.Tensor)
+    def upscale(self, frames: torch.Tensor):
+        assert isinstance(frames, torch.Tensor)
+        frames = frames.to(self.device, non_blocking=True)
+        if frames.ndim == 3:
+            assert frames.shape[-1] == 3
+            return self.upscale_single(frames)
+        elif frames.ndim == 4:
+            assert frames.shape[-1] == 3
+            N, H, W, C = frames.shape
+            hrs = []
+            for i in range(N):
+                hr = self.upscale_single(frames[i])
+                hrs.append(hr)
+            return hrs
+        else: 
+            raise Exception(frames.shape)
+    
+    def upscale_single(self, img:torch.Tensor):
         with torch.no_grad():
-            img = img.to(self.device, non_blocking=True).permute(2,0,1).unsqueeze(0)
+            img = img.permute(2,0,1).unsqueeze(0)
             img = img / 255.0
             lr_curr = torch.nn.functional.interpolate(img, size=self.lr_shape, mode='area')
             if self.lr_prev is None:
@@ -190,7 +206,7 @@ class EgvsrUpscalerService(BaseUpscalerService):
 if __name__ == '__main__':
     import os
     def handler(entry: UpscalerQueueEntry):
-        print('upscaled', entry.img.shape, entry.step)
+        print('upscaled', entry.frames.shape, entry.step)
     
     service = EgvsrUpscalerService(
         lr_level=0,
@@ -201,7 +217,9 @@ if __name__ == '__main__':
         if filename.endswith('.png'):
             frame = cv2.imread(f'./saves/frames/{filename}')
             frame = torch.tensor(frame, dtype=torch.float32)
-            service.push_frame(frame, i, timeout=30)
+            service.push_job(UpscalerQueueEntry(
+                frame, None, i,
+            ) , timeout=30)
     service.wait_for_job_clear()
     service.stop()
     #service.join(timeout=None)

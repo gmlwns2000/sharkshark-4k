@@ -1,13 +1,15 @@
 from dataclasses import dataclass
 from queue import Empty
+import queue
 from twitch_realtime_handler import (TwitchAudioGrabber,
                                    TwitchImageGrabber)
 import cv2, time, os
 import numpy as np
 import multiprocessing as mp
 
-SHARK = 'https://twitch.tv/tizmtizm'
-MARU = 'https://www.twitch.tv/maoruya'
+TW_SHARK = 'https://twitch.tv/tizmtizm'
+TW_MARU = 'https://www.twitch.tv/maoruya'
+TW_PIANOCAT = 'https://www.twitch.tv/pianocatvr'
 
 @dataclass
 class RecoderEntry:
@@ -17,14 +19,21 @@ class RecoderEntry:
     fps: float
 
 class TwitchRecoder:
-    def __init__(self, target_url=MARU, batch_sec=1, fps=24):
+    def __init__(self, target_url=TW_MARU, batch_sec=1, fps=24, on_queue=None):
         assert isinstance(batch_sec, int)
         self.url = target_url
         self.batch_sec = batch_sec
         self.fps = fps
         self.queue = mp.Queue(maxsize=100)
         self.cmd_queue = mp.Queue()
+        self.on_queue = on_queue
     
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        if 'proc' in state:
+            del state["proc"]
+        return state
+
     def proc(self):
         # change to a stream that is actually online
         audio_grabber = TwitchAudioGrabber(
@@ -69,12 +78,19 @@ class TwitchRecoder:
             t_avg = sum(t_sum)/len(t_sum)
             print(f'TwitchRecoder: batch[{index}] captured took average {t_avg:.2f} sec. Audio[{audio_segment.shape}] Video[{frames.shape}]')
             t = time.time()
-            self.queue.put(RecoderEntry(
+            entry = RecoderEntry(
                 index=index,
                 audio_segment=audio_segment, #(22000,2)
                 frames=frames, #(24, 1080, 1920,3) -> (24, 2160, 3840, 3)
                 fps=self.fps
-            ))
+            )
+            if self.on_queue is not None:
+                self.on_queue(entry)
+            else:
+                try:
+                    self.queue.put_nowait(entry)
+                except queue.Full:
+                    print(f'TwitchRecoder: output queue is full. Is consumer too slow?')
             index += 1
         
         print('TwitchRecoder: try term img')

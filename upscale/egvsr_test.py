@@ -6,9 +6,9 @@ if __name__ == '__main__':
     img = cv2.imread('./samples/images/shark1.png')
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-    lr_shape = (540, 960) #25ms
+    #lr_shape = (540, 960) #25ms
     #lr_shape = (630, 1120) #35ms
-    #lr_shape = (720, 1280) #45ms
+    lr_shape = (720, 1280) #45ms
     model = build_egvsr_model(
         img, device=0, lr_shape=lr_shape, bsize=1, jit_mode='tensorrt', do_benchmark=False
     )

@@ -10,7 +10,7 @@ class BaseService(metaclass=abc.ABCMeta):
         self.job_queue = mp.Queue(maxsize=100)
         self.result_queue = mp.Queue(maxsize=100)
         self.cmd_queue = mp.Queue(maxsize=4096)
-        self.proc = mp.Process(target=self.proc_main, daemon=True)
+        self.proc = mp.Process(target=self.proc_pre_main, daemon=True)
     
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -21,6 +21,9 @@ class BaseService(metaclass=abc.ABCMeta):
 
     def start(self):
         self.proc.start()
+
+    def proc_pre_main(self):
+        self.proc_main()
 
     def proc_main(self):
         self.proc_init()
@@ -52,10 +55,10 @@ class BaseService(metaclass=abc.ABCMeta):
 
         os.kill(os.getpid(), 0)
 
-    def push_frame(self, entry, timeout=10):
+    def push_job(self, entry, timeout=10):
         self.job_queue.put(entry, timeout=timeout)
 
-    def get_frame(self, timeout=10):
+    def get_result(self, timeout=10):
         entry = self.result_queue.get(timeout=timeout)
         return entry
 

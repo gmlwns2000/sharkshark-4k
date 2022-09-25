@@ -14,7 +14,8 @@ from .base_service import BaseService
 
 @dataclass
 class UpscalerQueueEntry:
-    img:typing.Union[np.ndarray, torch.Tensor] = None
+    frames:typing.Union[np.ndarray, torch.Tensor] = None
+    audio_segment:np.ndarray = None
     step:int = 0
 
 class BaseUpscalerService(BaseService):
@@ -22,23 +23,17 @@ class BaseUpscalerService(BaseService):
 
     def __init__(self) -> None:
         super().__init__()
-
-    def push_frame(self, img, step, timeout=10):
-        self.job_queue.put(UpscalerQueueEntry(
-            img=img, step=step
-        ), timeout=timeout)
     
     #@abs.abstractmethod
     def proc_init(self):
         pass
 
     #@abs.abstractmethod
-    def proc_job_recieved(self, job):
-        img = job.img
-        step = job.step
-        img_up = self.upscale(img)
+    def proc_job_recieved(self, job: UpscalerQueueEntry):
+        frames = job.frames
+        frames_up = self.upscale(frames)
         entry = UpscalerQueueEntry(
-            img=img_up, step=step
+            frames=frames_up, step=job.step, audio_segment=job.audio_segment
         )
         return entry
 
@@ -47,5 +42,5 @@ class BaseUpscalerService(BaseService):
         pass
     
     #@abc.abstractmethod
-    def upscale(self, img):
+    def upscale(self, frames):
         pass

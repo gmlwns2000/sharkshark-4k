@@ -1,3 +1,5 @@
 __pycache__/
 *.pyc
 saves/
+env_var.py
+ffmpeg/
