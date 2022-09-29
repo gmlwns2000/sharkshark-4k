@@ -181,6 +181,8 @@ class EgvsrUpscalerService(BaseUpscalerService):
             hrs = []
             for i in range(N):
                 hr = self.upscale_single(frames[i])
+                # gc.collect()
+                # torch.cuda.empty_cache()
                 hrs.append(hr)
             hrs = torch.stack(hrs, dim=0).to('cpu', non_blocking=True)
             return hrs
@@ -188,21 +190,22 @@ class EgvsrUpscalerService(BaseUpscalerService):
             raise Exception(frames.shape)
     
     def upscale_single(self, img:torch.Tensor):
+        img = img.permute(2,0,1).unsqueeze(0)
+        img = img / 255.0
+        lr_curr = torch.nn.functional.interpolate(img, size=self.lr_shape, mode='area')
+        if self.lr_prev is None:
+            self.lr_prev = lr_curr
+        if self.hr_prev is None:
+            self.hr_prev = torch.nn.functional.interpolate(img, size=self.hr_shape, mode='bicubic')
+        
         with torch.no_grad():
-            img = img.permute(2,0,1).unsqueeze(0)
-            img = img / 255.0
-            lr_curr = torch.nn.functional.interpolate(img, size=self.lr_shape, mode='area')
-            if self.lr_prev is None:
-                self.lr_prev = lr_curr
-            if self.hr_prev is None:
-                self.hr_prev = torch.nn.functional.interpolate(img, size=self.hr_shape, mode='bicubic')
-            
             hr_curr = self.model(lr_curr, self.lr_prev, self.hr_prev)
 
-            self.hr_prev = hr_curr
-            self.lr_prev = lr_curr
+        self.hr_prev = hr_curr
+        self.lr_prev = lr_curr
 
-            return (torch.clamp(hr_curr, 0, 1) * 255).detach()[0].permute(1,2,0)
+        _hr_curr = torch.nn.functional.interpolate(torch.clamp(hr_curr, 0, 1), size=(720,1280), mode='area')
+        return (_hr_curr * 255)[0].permute(1,2,0)
         
 if __name__ == '__main__':
     import os

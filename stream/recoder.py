@@ -5,11 +5,14 @@ from twitch_realtime_handler import (TwitchAudioGrabber,
                                    TwitchImageGrabber)
 import cv2, time, os
 import numpy as np
-import multiprocessing as mp
+import torch.multiprocessing as mp
+
+from util.profiler import Profiler
 
 TW_SHARK = 'https://twitch.tv/tizmtizm'
 TW_MARU = 'https://www.twitch.tv/maoruya'
 TW_PIANOCAT = 'https://www.twitch.tv/pianocatvr'
+TW_RUMYONG = 'https://www.twitch.tv/lumyon3'
 
 @dataclass
 class RecoderEntry:
@@ -17,6 +20,7 @@ class RecoderEntry:
     audio_segment: np.ndarray
     frames: np.ndarray
     fps: float
+    profiler: Profiler
 
 class TwitchRecoder:
     def __init__(self, target_url=TW_MARU, batch_sec=1, fps=24, on_queue=None):
@@ -24,7 +28,7 @@ class TwitchRecoder:
         self.url = target_url
         self.batch_sec = batch_sec
         self.fps = fps
-        self.queue = mp.Queue(maxsize=8)
+        self.queue = mp.Queue(maxsize=1)
         self.cmd_queue = mp.Queue()
         self.on_queue = on_queue
     
@@ -86,8 +90,10 @@ class TwitchRecoder:
                 index=index,
                 audio_segment=audio_segment, #(22000,2)
                 frames=frames, #(24, 1080, 1920,3) -> (24, 2160, 3840, 3)
-                fps=self.fps
+                fps=self.fps,
+                profiler=Profiler()
             )
+            entry.profiler.start('recoder.output')
             if self.on_queue is not None:
                 self.on_queue(entry)
             else:

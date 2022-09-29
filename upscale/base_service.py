@@ -1,14 +1,14 @@
 import abc, time, os
 from queue import Empty, Full
-import multiprocessing as mp
+import torch.multiprocessing as mp
 
 
 class BaseService(metaclass=abc.ABCMeta):
     on_queue = None
 
     def __init__(self) -> None:
-        self.job_queue = mp.Queue(maxsize=3)
-        self.result_queue = mp.Queue(maxsize=3)
+        self.job_queue = mp.Queue(maxsize=1)
+        self.result_queue = mp.Queue(maxsize=1)
         self.cmd_queue = mp.Queue(maxsize=4096)
         self.proc = mp.Process(target=self.proc_pre_main, daemon=True)
     

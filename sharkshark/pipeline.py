@@ -1,8 +1,9 @@
+import json
 import time, queue
 import torch
 import numpy as np
 from upscale.egvsr_upscaler import EgvsrUpscalerService, UpscalerQueueEntry
-from stream.recoder import TwitchRecoder, TW_MARU, TW_PIANOCAT, TW_SHARK, RecoderEntry
+from stream.recoder import TW_RUMYONG, TwitchRecoder, TW_MARU, TW_PIANOCAT, TW_SHARK, RecoderEntry
 from stream.streamer import TwitchStreamer, TwitchStreamerEntry
 
 class TwitchUpscalerPostStreamer:
@@ -26,9 +27,15 @@ class TwitchUpscalerPostStreamer:
     
     def recoder_on_queue(self, entry:RecoderEntry):
         try:
-            self.upscaler.push_job_nowait(UpscalerQueueEntry(
-                frames=torch.tensor(entry.frames, dtype=torch.float32), audio_segment=entry.audio_segment, step=self.frame_step
-            ))
+            entry.profiler.start('recoder.output.entry')
+            new_entry = UpscalerQueueEntry(
+                frames=torch.tensor(entry.frames, dtype=torch.float32, requires_grad=False), 
+                audio_segment=torch.tensor(entry.audio_segment, requires_grad=False), 
+                step=self.frame_step,
+                profiler=entry.profiler
+            )
+            entry.profiler.end('recoder.output.entry')
+            self.upscaler.push_job_nowait(new_entry)
         except queue.Full:
             print("TwitchUpscalerPostStreamer: recoder output skipped")
         self.frame_step += 1
@@ -40,17 +47,21 @@ class TwitchUpscalerPostStreamer:
             f'elapsed: {entry.elapsed*1000:.1f}ms, onqueue'
         )
         try:
+            entry.profiler.start('upscaler.output.queue')
             new_entry = TwitchStreamerEntry(
-                frames=entry.frames,
-                audio_segments=entry.audio_segment,
-                step=entry.step
+                frames=entry.frames.clone(),
+                audio_segments=entry.audio_segment.clone(),
+                step=entry.step,
+                profiler=entry.profiler
             )
+            entry.profiler.end('upscaler.output.queue')
             self.streamer.push_job_nowait(new_entry)
         except queue.Full:
             print("TwitchUpscalerPostStreamer: upscaler output skipped")
     
     def streamer_on_queue(self, entry:TwitchStreamerEntry):
         print(f'TwitchUpscalerPostStreamer: streamed, idx: {entry.step}, took: {(time.time()-self.last_streamed)*1000:.1f}ms, frames[{len(entry.frames)},{entry.frames[0].shape}]')
+        print(json.dumps(entry.profiler.data, indent=2))
         self.last_streamed = time.time()
     
     def start(self):
@@ -70,7 +81,7 @@ class TwitchUpscalerPostStreamer:
 
 if __name__ == '__main__':
     pipeline = TwitchUpscalerPostStreamer(
-        url = TW_MARU, fps = 24
+        url = TW_RUMYONG, fps = 24
     )
     pipeline.start()
     pipeline.join()

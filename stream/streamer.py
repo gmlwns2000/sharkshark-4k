@@ -7,14 +7,17 @@ from twitchstream.chat import TwitchChatStream
 from upscale.base_service import BaseService
 from env_var import *
 import numpy as np
-import multiprocessing as mp
+import torch.multiprocessing as mp
 import cv2
+
+from util.profiler import Profiler
 
 @dataclass
 class TwitchStreamerEntry:
     frames: np.ndarray
     audio_segments: np.ndarray
     step: int
+    profiler: Profiler
 
 class TwitchStreamer(BaseService):
     def __init__(self, 
@@ -58,6 +61,8 @@ class TwitchStreamer(BaseService):
         self.last_frame_warn = 0
     
     def proc_job_recieved(self, job:TwitchStreamerEntry):
+        job.profiler.end('upscaler.output')
+
         #manage stream
         videostream = self.videostream
         chatstream = self.chatstream
@@ -69,17 +74,27 @@ class TwitchStreamer(BaseService):
         if job.step < self.last_step:
             print('TwitchStreamer: [W] Job is queued with incorrect order.')
         
+        job.profiler.start('streamer.frames.queue')
         for i in range(len(job.frames)):
             frame = job.frames[i]
             if isinstance(frame, torch.Tensor):
+                #print(f"TwitchStreamer.proc: {frame.shape} {frame.device}")
+                if frame.device != 'cpu':
+                    frame = frame.cpu()
                 frame = frame.numpy().astype(np.uint8)
             if frame.shape != (*self.resolution, 3):
                 frame = cv2.resize(frame, dsize=(self.resolution[1], self.resolution[0]), interpolation=cv2.INTER_AREA)
             frame = frame.astype(np.float32) / 255.0
             #print('frame stat', np.min(frame), np.max(frame), frame.dtype, frame.shape)
             videostream.send_video_frame(frame)
+        job.profiler.end('streamer.frames.queue')
         
-        videostream.send_audio(job.audio_segments[:,0], job.audio_segments[:,1])
+        job.profiler.start('streamer.audio.queue')
+        audio_seg = job.audio_segments
+        if isinstance(audio_seg, torch.Tensor):
+            audio_seg = audio_seg.numpy()
+        videostream.send_audio(audio_seg[:,0], audio_seg[:,1])
+        job.profiler.end('streamer.audio.queue')
 
         self.last_step = job.step
         
