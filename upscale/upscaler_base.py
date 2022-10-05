@@ -16,8 +16,8 @@ from .base_service import BaseService
 
 @dataclass
 class UpscalerQueueEntry:
-    frames:typing.Union[np.ndarray, torch.Tensor] = None
-    audio_segment:np.ndarray = None
+    frames:torch.Tensor = None
+    audio_segment:torch.Tensor = None
     step:int = 0
     elapsed:float = 0
     last_modified:float = 0

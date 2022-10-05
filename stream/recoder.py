@@ -13,6 +13,7 @@ TW_SHARK = 'https://twitch.tv/tizmtizm'
 TW_MARU = 'https://www.twitch.tv/maoruya'
 TW_PIANOCAT = 'https://www.twitch.tv/pianocatvr'
 TW_RUMYONG = 'https://www.twitch.tv/lumyon3'
+TW_MAOU = 'https://www.twitch.tv/mawang0216'
 
 @dataclass
 class RecoderEntry:
@@ -31,6 +32,7 @@ class TwitchRecoder:
         self.queue = mp.Queue(maxsize=1)
         self.cmd_queue = mp.Queue()
         self.on_queue = on_queue
+        self.output_shape = None
     
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -53,7 +55,7 @@ class TwitchRecoder:
         print('TwitchRecoder: TwitchImageGrabber init')
         image_grabber = TwitchImageGrabber(
             twitch_url=self.url,
-            quality="1080p60",  # quality of the stream could be ["160p", "360p", "480p", "720p", "720p60", "1080p", "1080p60"]
+            quality="720p60",  # quality of the stream could be ["160p", "360p", "480p", "720p", "720p60", "1080p", "1080p60"]
             blocking=True,
             rate=self.fps  # frame per rate (fps)
         )
@@ -78,6 +80,8 @@ class TwitchRecoder:
             frames = []
             for i in range(self.batch_sec * self.fps):
                 frame = image_grabber.grab()
+                if self.output_shape is not None:
+                    frame = cv2.resize(frame, dsize=[self.output_shape[1], self.output_shape[0]], interpolation=cv2.INTER_AREA)
                 frames.append(frame)
             frames = np.stack(frames, axis=0)
             t_sum.append(time.time()-t)

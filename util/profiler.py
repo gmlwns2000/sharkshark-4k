@@ -5,6 +5,9 @@ class Profiler:
         self.start_ticks = {}
         self.data = {}
     
+    def set(self, name, value):
+        self.data[name] = value
+    
     def start(self, name):
         self.start_ticks[name] = time.time()
 
