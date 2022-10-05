@@ -44,13 +44,15 @@ class TwitchOutputStream(object):
     :type verbose: boolean
     """
     def __init__(self,
-                 twitch_stream_key,
-                 width=640,
-                 height=480,
-                 fps=30.,
-                 ffmpeg_binary="ffmpeg",
-                 enable_audio=False,
-                 verbose=False):
+            twitch_stream_key,
+            width=640,
+            height=480,
+            fps=30.,
+            ffmpeg_binary="ffmpeg",
+            enable_audio=False,
+            verbose=False,
+            output_file=None,
+        ):
         self.twitch_stream_key = twitch_stream_key
         self.width = width
         self.height = height
@@ -60,6 +62,7 @@ class TwitchOutputStream(object):
         self.ffmpeg_binary = ffmpeg_binary
         self.verbose = verbose
         self.audio_enabled = enable_audio
+        self.output_file = output_file
         try:
             self.reset()
         except OSError:
@@ -121,15 +124,15 @@ class TwitchOutputStream(object):
             # VIDEO CODEC PARAMETERS
             '-vcodec', 'libx264',
             '-r', '%d' % self.fps,
-            '-b:v', '15000k',
+            '-b:v', '16000k',
             '-s', '%dx%d' % (self.width, self.height),
-            '-preset', 'faster', '-tune', 'zerolatency',
+            '-preset', 'veryfast', '-tune', 'zerolatency',
             '-crf', '16',
             '-pix_fmt', 'yuv420p',
             # '-force_key_frames', r'expr:gte(t,n_forced*2)',
-            '-minrate', '3000k', '-maxrate', '15000k',
-            '-bufsize', '75000k',
-            '-g', '60',     # key frame distance
+            '-minrate', '16000k', '-maxrate', '16000k',
+            '-bufsize', '20000k',
+            '-g', '10',     # key frame distance
             '-keyint_min', '1',
             # '-filter:v "setpts=0.25*PTS"'
             # '-vsync','passthrough',
@@ -156,7 +159,7 @@ class TwitchOutputStream(object):
             '-threads', '16',
 
             # STREAM TO TWITCH
-            '-f', 'flv', self.get_closest_ingest(),
+            '-f', 'flv', self.output_file if self.output_file is not None else self.get_closest_ingest(),
         ])
 
         devnullpipe = subprocess.DEVNULL

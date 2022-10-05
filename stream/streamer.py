@@ -23,7 +23,7 @@ class TwitchStreamer(BaseService):
     def __init__(self, 
         resolution=(1080,1920), fps=24, 
         streamkey=TWITCH_STREAMKEY, oauth=TWITCH_OAUTH, username=TWITCH_USERNAME,
-        on_queue=None
+        on_queue=None, output_file = None
     ) -> None:
         self.streamkey = streamkey
         self.username = username
@@ -32,6 +32,7 @@ class TwitchStreamer(BaseService):
         self.oauth = oauth
         self.last_step = -1
         self.on_queue = on_queue
+        self.output_file = output_file
         super().__init__()
 
     def proc_pre_main(self):
@@ -41,7 +42,8 @@ class TwitchStreamer(BaseService):
             height=self.resolution[0],
             fps=self.fps,
             enable_audio=True,
-            verbose=False
+            verbose=False,
+            output_file=self.output_file
         ) as videostream:
         # TwitchChatStream(
         #     username=self.username.lower(),  # Must provide a lowercase username.
@@ -59,6 +61,7 @@ class TwitchStreamer(BaseService):
         self.frequency = 100
         self.last_phase = 0
         self.last_frame_warn = 0
+        self.frame_count = 0
     
     def proc_job_recieved(self, job:TwitchStreamerEntry):
         job.profiler.end('upscaler.output')
@@ -84,6 +87,8 @@ class TwitchStreamer(BaseService):
                 frame = frame.numpy().astype(np.uint8)
             if frame.shape != (*self.resolution, 3):
                 frame = cv2.resize(frame, dsize=(self.resolution[1], self.resolution[0]), interpolation=cv2.INTER_AREA)
+            frame = cv2.putText(frame, f"{self.frame_count}", (10, 40), cv2.FONT_HERSHEY_PLAIN, 2.0, (0,255,0), 2)
+            self.frame_count += 1
             frame = frame.astype(np.float32) / 255.0
             #print('frame stat', np.min(frame), np.max(frame), frame.dtype, frame.shape)
             videostream.send_video_frame(frame)

@@ -3,7 +3,7 @@ import time, queue
 import torch
 import numpy as np
 from upscale.egvsr_upscaler import EgvsrUpscalerService, UpscalerQueueEntry
-from stream.recoder import TW_RUMYONG, TwitchRecoder, TW_MARU, TW_PIANOCAT, TW_SHARK, RecoderEntry, TW_MAOU
+from stream.recoder import TW_DALTA, TW_RUMYONG, TwitchRecoder, TW_MARU, TW_PIANOCAT, TW_SHARK, RecoderEntry, TW_MAOU, TW_VIICHAN
 from stream.streamer import TwitchStreamer, TwitchStreamerEntry
 
 class TwitchUpscalerPostStreamer:
@@ -13,15 +13,18 @@ class TwitchUpscalerPostStreamer:
         self.device = device
 
         self.recoder = TwitchRecoder(
-            target_url=self.url, batch_sec=1, fps=self.fps, on_queue=self.recoder_on_queue
+            target_url=self.url, batch_sec=1, fps=self.fps, on_queue=self.recoder_on_queue,
+            quality='720p60'
         )
         self.batch_size = self.fps
         self.upscaler = EgvsrUpscalerService(
             device=self.device, lr_level=0, on_queue=self.upscaler_on_queue
         )
         self.recoder.output_shape = self.upscaler.lr_shape
+        self.upscaler.output_shape = (1440, 2560)
         self.streamer = TwitchStreamer(
-            on_queue=self.streamer_on_queue, fps=self.fps, resolution=(720,1280)
+            on_queue=self.streamer_on_queue, fps=self.fps, resolution=self.upscaler.output_shape, 
+            output_file='output.flv'
         )
         self.frame_step = 0
         self.last_streamed = time.time()
@@ -33,7 +36,7 @@ class TwitchUpscalerPostStreamer:
             audio_segment = torch.tensor(entry.audio_segment, requires_grad=False)
             frames.share_memory_()
             audio_segment.share_memory_()
-            entry.profiler.set('recoder.output.frames.shape', tuple(frames.shape))
+            entry.profiler.set('recoder.output.frames.shape', str(tuple(frames.shape)))
             new_entry = UpscalerQueueEntry(
                 frames=frames, 
                 audio_segment=audio_segment, 
@@ -54,11 +57,14 @@ class TwitchUpscalerPostStreamer:
         )
         try:
             entry.profiler.start('upscaler.output.queue')
-            frames = entry.frames.clone()
-            audio_segments = entry.audio_segment.clone()
-            frames.share_memory_()
-            audio_segments.share_memory_()
-            entry.profiler.set('upscaler.output.frames.shape', tuple(frames.shape))
+            frames = entry.frames#.clone()
+            #frames = (frames*255).to(torch.uint8)
+            audio_segments = entry.audio_segment#.clone()
+            if not frames.is_shared():
+                frames.share_memory_()
+            if not audio_segments.is_shared():
+                audio_segments.share_memory_()
+            entry.profiler.set('upscaler.output.frames.shape', str(tuple(frames.shape)))
             new_entry = TwitchStreamerEntry(
                 frames=frames,
                 audio_segments=audio_segments,
@@ -92,7 +98,7 @@ class TwitchUpscalerPostStreamer:
 
 if __name__ == '__main__':
     pipeline = TwitchUpscalerPostStreamer(
-        url = TW_MAOU, fps = 24
+        url = TW_VIICHAN, fps = 24
     )
     pipeline.start()
     pipeline.join()

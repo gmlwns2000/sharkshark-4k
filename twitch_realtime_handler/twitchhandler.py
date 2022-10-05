@@ -27,11 +27,21 @@ class _TwitchHandler():
             raise ValueError("No twitch_url specified")
         try:
             stream_hls = streamlink.streams(self.twitch_url)
+            print("TwitchHandler: Found resolutions:", stream_hls.keys())
+            if (self.quality not in stream_hls) and self.quality == 'audio_only':
+                if "audio_opus" in stream_hls:
+                    print("TwitchHandler: opus selected for audio stream")
+                    self.quality = 'audio_opus'
         except streamlink.exceptions.NoPluginError:
             raise ValueError(f"No stream availabe for {self.twitch_url}")
         if self.quality not in stream_hls:
-            raise ValueError(f"The stream has not the given quality({self.quality}) but ({stream_hls})")
-        self._stream_url = stream_hls[self.quality].url
+            raise ValueError(f"The stream has not the given quality({self.quality}) but ({stream_hls.keys()})")
+        #print(stream_hls)
+        if hasattr(stream_hls[self.quality], 'substreams'):
+            #print(stream_hls[self.quality].substreams)
+            self._stream_url = stream_hls[self.quality].substreams[0].url
+        else:
+            self._stream_url = stream_hls[self.quality].url
 
 
 @dataclass

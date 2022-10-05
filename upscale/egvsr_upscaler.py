@@ -153,6 +153,7 @@ class EgvsrUpscalerService(BaseUpscalerService):
         self.hr_shape = tuple([i * self.scale for i in self.lr_shape])
         self.device = device
         self.on_queue = on_queue
+        self.output_shape = None
 
         super().__init__()
 
@@ -184,28 +185,32 @@ class EgvsrUpscalerService(BaseUpscalerService):
                 # gc.collect()
                 # torch.cuda.empty_cache()
                 hrs.append(hr)
-            hrs = torch.stack(hrs, dim=0).to('cpu', non_blocking=True)
+            hrs = torch.stack(hrs, dim=0).detach()#.to('cpu', non_blocking=True)
             return hrs
         else: 
             raise Exception(frames.shape)
     
     def upscale_single(self, img:torch.Tensor):
-        img = img.permute(2,0,1).unsqueeze(0)
-        img = img / 255.0
-        lr_curr = torch.nn.functional.interpolate(img, size=self.lr_shape, mode='area')
-        if self.lr_prev is None:
-            self.lr_prev = lr_curr
-        if self.hr_prev is None:
-            self.hr_prev = torch.nn.functional.interpolate(img, size=self.hr_shape, mode='bicubic')
-        
         with torch.no_grad():
+            img = img.permute(2,0,1).unsqueeze(0)
+            img = img / 255.0
+            lr_curr = torch.nn.functional.interpolate(img, size=self.lr_shape, mode='area')
+            if self.lr_prev is None:
+                #self.lr_prev = lr_curr
+                self.lr_prev = torch.zeros_like(lr_curr)
+            if self.hr_prev is None:
+                #self.hr_prev = torch.nn.functional.interpolate(img, size=self.hr_shape, mode='bicubic')
+                self.hr_prev = torch.zeros((1, 3, self.hr_shape[0], self.hr_shape[1]), device=lr_curr.device, dtype=lr_curr.dtype)
+            
             hr_curr = self.model(lr_curr, self.lr_prev, self.hr_prev)
 
-        self.hr_prev = hr_curr
-        self.lr_prev = lr_curr
+            self.hr_prev = hr_curr
+            self.lr_prev = lr_curr
 
-        _hr_curr = torch.nn.functional.interpolate(torch.clamp(hr_curr, 0, 1), size=(720,1280), mode='area')
-        return (_hr_curr * 255)[0].permute(1,2,0)
+            _hr_curr = torch.clamp(hr_curr, 0, 1)
+            if self.output_shape is not None:
+                _hr_curr = torch.nn.functional.interpolate(_hr_curr, size=self.output_shape, mode='area')
+            return (_hr_curr * 255)[0].permute(1,2,0).to(torch.uint8)
         
 if __name__ == '__main__':
     import os

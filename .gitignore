@@ -3,3 +3,4 @@ __pycache__/
 saves/
 env_var.py
 ffmpeg/
+*.flv

@@ -14,6 +14,8 @@ TW_MARU = 'https://www.twitch.tv/maoruya'
 TW_PIANOCAT = 'https://www.twitch.tv/pianocatvr'
 TW_RUMYONG = 'https://www.twitch.tv/lumyon3'
 TW_MAOU = 'https://www.twitch.tv/mawang0216'
+TW_DALTA = 'https://www.twitch.tv/dalta_23'
+TW_VIICHAN = 'https://www.twitch.tv/viichan6'
 
 @dataclass
 class RecoderEntry:
@@ -24,7 +26,7 @@ class RecoderEntry:
     profiler: Profiler
 
 class TwitchRecoder:
-    def __init__(self, target_url=TW_MARU, batch_sec=1, fps=24, on_queue=None):
+    def __init__(self, target_url=TW_MARU, batch_sec=1, fps=24, on_queue=None, quality='1080p'):
         assert isinstance(batch_sec, int)
         self.url = target_url
         self.batch_sec = batch_sec
@@ -33,6 +35,8 @@ class TwitchRecoder:
         self.cmd_queue = mp.Queue()
         self.on_queue = on_queue
         self.output_shape = None
+        self.frame_count = 0
+        self.quality = quality
     
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -55,7 +59,7 @@ class TwitchRecoder:
         print('TwitchRecoder: TwitchImageGrabber init')
         image_grabber = TwitchImageGrabber(
             twitch_url=self.url,
-            quality="720p60",  # quality of the stream could be ["160p", "360p", "480p", "720p", "720p60", "1080p", "1080p60"]
+            quality=self.quality,  # quality of the stream could be ["160p", "360p", "480p", "720p", "720p60", "1080p", "1080p60"]
             blocking=True,
             rate=self.fps  # frame per rate (fps)
         )
@@ -82,6 +86,8 @@ class TwitchRecoder:
                 frame = image_grabber.grab()
                 if self.output_shape is not None:
                     frame = cv2.resize(frame, dsize=[self.output_shape[1], self.output_shape[0]], interpolation=cv2.INTER_AREA)
+                    frame = cv2.putText(frame, f"{self.frame_count}", (10, 100), cv2.FONT_HERSHEY_PLAIN, 2, (255,0,0), 2)
+                    self.frame_count += 1
                 frames.append(frame)
             frames = np.stack(frames, axis=0)
             t_sum.append(time.time()-t)
