@@ -16,6 +16,7 @@ TW_RUMYONG = 'https://www.twitch.tv/lumyon3'
 TW_MAOU = 'https://www.twitch.tv/mawang0216'
 TW_DALTA = 'https://www.twitch.tv/dalta_23'
 TW_VIICHAN = 'https://www.twitch.tv/viichan6'
+TW_SHYLILY = 'https://www.twitch.tv/shylily'
 
 @dataclass
 class RecoderEntry:
@@ -140,7 +141,7 @@ class TwitchRecoder:
 
 if __name__ == '__main__':
     print('asdf')
-    recoder = TwitchRecoder(target_url=TW_MARU)
+    recoder = TwitchRecoder(target_url=TW_SHYLILY)
     recoder.start()
 
     time.sleep(3)

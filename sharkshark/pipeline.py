@@ -2,7 +2,9 @@ import json
 import time, queue
 import torch
 import numpy as np
-from upscale.egvsr_upscaler import EgvsrUpscalerService, UpscalerQueueEntry
+from upscale.upscaler_base import UpscalerQueueEntry
+from upscale.egvsr_upscaler import EgvsrUpscalerService
+from upscale.fsrcnn_upscaler import FsrcnnUpscalerService
 from stream.recoder import TW_DALTA, TW_RUMYONG, TwitchRecoder, TW_MARU, TW_PIANOCAT, TW_SHARK, RecoderEntry, TW_MAOU, TW_VIICHAN
 from stream.streamer import TwitchStreamer, TwitchStreamerEntry
 
@@ -17,8 +19,11 @@ class TwitchUpscalerPostStreamer:
             quality='720p60'
         )
         self.batch_size = self.fps
-        self.upscaler = EgvsrUpscalerService(
-            device=self.device, lr_level=0, on_queue=self.upscaler_on_queue
+        # self.upscaler = EgvsrUpscalerService(
+        #     device=self.device, lr_level=0, on_queue=self.upscaler_on_queue
+        # )
+        self.upscaler = FsrcnnUpscalerService(
+            device=self.device, lr_level=1, on_queue=self.upscaler_on_queue
         )
         self.recoder.output_shape = self.upscaler.lr_shape
         self.upscaler.output_shape = (1440, 2560)
@@ -28,6 +33,7 @@ class TwitchUpscalerPostStreamer:
         )
         self.frame_step = 0
         self.last_streamed = time.time()
+        self.frame_skips = True
     
     def recoder_on_queue(self, entry:RecoderEntry):
         try:
@@ -44,7 +50,10 @@ class TwitchUpscalerPostStreamer:
                 profiler=entry.profiler
             )
             entry.profiler.end('recoder.output.entry')
-            self.upscaler.push_job_nowait(new_entry)
+            if self.frame_skips:
+                self.upscaler.push_job_nowait(new_entry)
+            else:
+                self.upscaler.push_job(new_entry)
         except queue.Full:
             print("TwitchUpscalerPostStreamer: recoder output skipped")
         self.frame_step += 1
@@ -72,7 +81,10 @@ class TwitchUpscalerPostStreamer:
                 profiler=entry.profiler
             )
             entry.profiler.end('upscaler.output.queue')
-            self.streamer.push_job_nowait(new_entry)
+            if self.frame_skips:
+                self.streamer.push_job_nowait(new_entry)
+            else:
+                self.streamer.push_job(new_entry)
         except queue.Full:
             print("TwitchUpscalerPostStreamer: upscaler output skipped")
     
@@ -98,7 +110,7 @@ class TwitchUpscalerPostStreamer:
 
 if __name__ == '__main__':
     pipeline = TwitchUpscalerPostStreamer(
-        url = TW_VIICHAN, fps = 24
+        url = 'https://www.youtube.com/watch?v=K8WC6uWyC9I', fps = 24
     )
     pipeline.start()
     pipeline.join()

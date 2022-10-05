@@ -12,6 +12,7 @@ from typing import Union
 
 import numpy as np
 import streamlink
+from streamlink.session import Streamlink
 
 
 @dataclass
@@ -26,7 +27,11 @@ class _TwitchHandler():
         if self.twitch_url is None:
             raise ValueError("No twitch_url specified")
         try:
-            stream_hls = streamlink.streams(self.twitch_url)
+            sess = Streamlink()
+            #sess.set_option('http-proxy', 'sock5h://72.210.221.197:4145')
+            # sess.set_option('http-proxy', 'socks4://103.47.216.19:4145')
+            # sess.set_option('https-proxy', 'socks4://103.47.216.19:4145')
+            stream_hls = sess.streams(self.twitch_url)
             print("TwitchHandler: Found resolutions:", stream_hls.keys())
             if (self.quality not in stream_hls) and self.quality == 'audio_only':
                 if "audio_opus" in stream_hls:
