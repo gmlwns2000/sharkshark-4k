@@ -131,8 +131,8 @@ class TwitchOutputStream(object):
             '-pix_fmt', 'yuv420p',
             # '-force_key_frames', r'expr:gte(t,n_forced*2)',
             '-minrate', '16000k', '-maxrate', '16000k',
-            '-bufsize', '20000k',
-            '-g', '10',     # key frame distance
+            '-bufsize', '80000k',
+            '-g', '30',     # key frame distance
             '-keyint_min', '1',
             # '-filter:v "setpts=0.25*PTS"'
             # '-vsync','passthrough',

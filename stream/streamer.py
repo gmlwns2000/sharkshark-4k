@@ -82,11 +82,15 @@ class TwitchStreamer(BaseService):
             frame = job.frames[i]
             if isinstance(frame, torch.Tensor):
                 #print(f"TwitchStreamer.proc: {frame.shape} {frame.device}")
+                if frame.shape != (*self.resolution, 3):
+                    print('missmatch', frame.shape, self.resolution)
+                    frame = torch.nn.functional.interpolate(frame, self.resolution, mode='area')
                 if frame.device != 'cpu':
                     frame = frame.cpu()
                 frame = frame.numpy().astype(np.uint8)
             if frame.shape != (*self.resolution, 3):
                 frame = cv2.resize(frame, dsize=(self.resolution[1], self.resolution[0]), interpolation=cv2.INTER_AREA)
+                print('err')
             frame = cv2.putText(frame, f"{self.frame_count}", (10, 40), cv2.FONT_HERSHEY_PLAIN, 2.0, (0,255,0), 2)
             self.frame_count += 1
             frame = frame.astype(np.float32) / 255.0

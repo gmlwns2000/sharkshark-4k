@@ -23,13 +23,13 @@ class TwitchUpscalerPostStreamer:
         #     device=self.device, lr_level=0, on_queue=self.upscaler_on_queue
         # )
         self.upscaler = FsrcnnUpscalerService(
-            device=self.device, lr_level=1, on_queue=self.upscaler_on_queue
+            device=self.device, lr_level=3, on_queue=self.upscaler_on_queue
         )
         self.recoder.output_shape = self.upscaler.lr_shape
         self.upscaler.output_shape = (1440, 2560)
         self.streamer = TwitchStreamer(
             on_queue=self.streamer_on_queue, fps=self.fps, resolution=self.upscaler.output_shape, 
-            output_file='output.flv'
+            output_file='rtmp://127.0.0.1/live' #'output.flv'
         )
         self.frame_step = 0
         self.last_streamed = time.time()
@@ -110,7 +110,7 @@ class TwitchUpscalerPostStreamer:
 
 if __name__ == '__main__':
     pipeline = TwitchUpscalerPostStreamer(
-        url = 'https://www.youtube.com/watch?v=K8WC6uWyC9I', fps = 24
+        url = TW_SHARK, fps = 24
     )
     pipeline.start()
     pipeline.join()
