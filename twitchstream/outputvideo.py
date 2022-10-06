@@ -124,15 +124,15 @@ class TwitchOutputStream(object):
             # VIDEO CODEC PARAMETERS
             '-vcodec', 'libx264',
             '-r', '%d' % self.fps,
-            '-b:v', '16000k',
+            '-b:v', '25000k',
             '-s', '%dx%d' % (self.width, self.height),
             '-preset', 'veryfast', '-tune', 'zerolatency',
             '-crf', '16',
             '-pix_fmt', 'yuv420p',
             # '-force_key_frames', r'expr:gte(t,n_forced*2)',
-            '-minrate', '16000k', '-maxrate', '16000k',
+            '-minrate', '25000k', '-maxrate', '25000k',
             '-bufsize', '80000k',
-            '-g', '30',     # key frame distance
+            '-g', '10',     # key frame distance
             '-keyint_min', '1',
             # '-filter:v "setpts=0.25*PTS"'
             # '-vsync','passthrough',
@@ -144,7 +144,7 @@ class TwitchOutputStream(object):
             # '-acodec', 'aac', '-strict', 'experimental',
             # '-ab', '128k', '-ar', '44100', '-ac', '1',
             # '-async','44100',
-            # '-filter_complex', 'asplit', #for audio sync?
+            #'-filter_complex', 'asplit', #for audio sync?
 
             # STORE THE VIDEO PARAMETERS
             # '-vcodec', 'libx264', '-s', '%dx%d'%(width, height),
@@ -328,7 +328,7 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
         self.last_frame_time = None
         self.next_video_send_time = None
         self.frame_counter = 0
-        self.q_video = queue.PriorityQueue(maxsize=60*5)
+        self.q_video = queue.PriorityQueue(maxsize=1)
 
         # don't call the functions directly, as they block on the first
         # call
@@ -344,7 +344,7 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
             self.last_audio_time = None
             self.next_audio_send_time = None
             self.audio_frame_counter = 0
-            self.q_audio = queue.PriorityQueue()
+            self.q_audio = queue.PriorityQueue(maxsize=1)
             self.t = threading.Timer(0.0, self._send_audio)
             self.t.daemon = True
             self.t.start()

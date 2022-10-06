@@ -5,7 +5,7 @@ import numpy as np
 from upscale.upscaler_base import UpscalerQueueEntry
 from upscale.egvsr_upscaler import EgvsrUpscalerService
 from upscale.fsrcnn_upscaler import FsrcnnUpscalerService
-from stream.recoder import TW_DALTA, TW_RUMYONG, TwitchRecoder, TW_MARU, TW_PIANOCAT, TW_SHARK, RecoderEntry, TW_MAOU, TW_VIICHAN
+from stream.recoder import TW_DALTA, TW_RUMYONG, TwitchRecoder, TW_MARU, TW_PIANOCAT, TW_SHARK, RecoderEntry, TW_MAOU, TW_VIICHAN, TW_DANCINGSANA
 from stream.streamer import TwitchStreamer, TwitchStreamerEntry
 
 class TwitchUpscalerPostStreamer:
@@ -110,7 +110,7 @@ class TwitchUpscalerPostStreamer:
 
 if __name__ == '__main__':
     pipeline = TwitchUpscalerPostStreamer(
-        url = TW_SHARK, fps = 24
+        url = TW_MARU, fps = 24
     )
     pipeline.start()
     pipeline.join()
