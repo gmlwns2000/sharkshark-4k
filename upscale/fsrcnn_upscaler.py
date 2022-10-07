@@ -117,7 +117,7 @@ class FsrcnnUpscalerService(BaseUpscalerService):
                 with torch.no_grad(), torch.cuda.amp.autocast():
                     diff_map = torch.mean(torch.abs(__lr_curr - self.lr_prev), dim=0)
                     diff_map = self.denoise_blur(diff_map.unsqueeze(0).unsqueeze(0)).squeeze(0).squeeze(0) * 10
-                    diff_map = torch.clamp(diff_map, 0.00, 0.1) * 0.75
+                    diff_map = torch.clamp(diff_map, 0.00, 0.1) * 0.35
                 # lr_curr[:,:,:3,:,:] = _lr_curr
                 # lr_curr[0,0,0,:,:] = diff_map
                 # lr_curr[0,0,1,:,:] = diff_map

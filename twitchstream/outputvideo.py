@@ -127,13 +127,13 @@ class TwitchOutputStream(object):
             '-r', '%d' % self.fps,
             '-b:v', bitrate,
             '-s', '%dx%d' % (self.width, self.height),
-            '-preset', 'faster', '-tune', 'zerolatency',
+            '-preset', 'faster', #'-tune', 'zerolatency',
             '-crf', '16',
             '-pix_fmt', 'yuv420p',
             # '-force_key_frames', r'expr:gte(t,n_forced*2)',
             '-minrate', bitrate, '-maxrate', bitrate,
             '-bufsize', '75000k',
-            '-g', '10',     # key frame distance
+            '-g', '2',     # key frame distance
             #'-keyint_min', '1',
             # '-filter:v "setpts=0.25*PTS"'
             # '-vsync','passthrough',
@@ -329,7 +329,7 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
         self.last_frame_time = None
         self.next_video_send_time = None
         self.frame_counter = 0
-        self.q_video = queue.PriorityQueue(maxsize=100)
+        self.q_video = queue.PriorityQueue(maxsize=120)
 
         # don't call the functions directly, as they block on the first
         # call
@@ -345,7 +345,7 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
             self.last_audio_time = None
             self.next_audio_send_time = None
             self.audio_frame_counter = 0
-            self.q_audio = queue.PriorityQueue(maxsize=100)
+            self.q_audio = queue.PriorityQueue(maxsize=120)
             self.t = threading.Timer(0.0, self._send_audio)
             self.t.daemon = True
             self.t.start()

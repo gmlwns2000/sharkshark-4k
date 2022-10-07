@@ -78,6 +78,7 @@ class TwitchStreamer(BaseService):
             print('TwitchStreamer: [W] Job is queued with incorrect order.')
         
         job.profiler.start('streamer.frames.queue')
+        frames_to_send = []
         for i in range(len(job.frames)):
             frame = job.frames[i]
             if isinstance(frame, torch.Tensor):
@@ -94,22 +95,34 @@ class TwitchStreamer(BaseService):
             if frame.shape != (*self.resolution, 3):
                 frame = cv2.resize(frame, dsize=(self.resolution[1], self.resolution[0]), interpolation=cv2.INTER_AREA)
                 print('err')
-            frame = cv2.putText(frame, f"{self.frame_count}", (10, 40), cv2.FONT_HERSHEY_PLAIN, 2.0, (0,255,0), 2)
-            self.frame_count += 1
-            frame = frame.astype(np.float32) / 255.0
+            frames_to_send.append(frame)
             #print('frame stat', np.min(frame), np.max(frame), frame.dtype, frame.shape)
-            videostream.send_video_frame(frame)
+            #videostream.send_video_frame(frame)
         job.profiler.end('streamer.frames.queue')
         
         job.profiler.start('streamer.audio.queue')
         audio_seg = job.audio_segments
         if isinstance(audio_seg, torch.Tensor):
             audio_seg = audio_seg.numpy()
-        batch_size = len(job.frames)
+        batch_size = len(frames_to_send)
+        audio_segs_to_send = []
         for i in range(batch_size):
             seg = audio_seg[i*(audio_seg.shape[0]//batch_size):(i+1)*(audio_seg.shape[0]//batch_size)]
-            videostream.send_audio(seg[:,0], seg[:,1])
+            audio_segs_to_send.append(seg)
+            #videostream.send_audio(seg[:,0], seg[:,1])
         job.profiler.end('streamer.audio.queue')
+
+        job.profiler.start('streamer.send.queue')
+        for i in range(len(frames_to_send)):
+            seg = audio_segs_to_send[i]
+            videostream.send_audio(seg[:,0], seg[:,1])
+
+            frame = frames_to_send[i]
+            frame = cv2.putText(frame, f"{self.frame_count}", (10, 40), cv2.FONT_HERSHEY_PLAIN, 2.0, (0,255,0), 2)
+            self.frame_count += 1
+            frame = frame.astype(np.float32) / 255.0
+            videostream.send_video_frame(frame)
+        job.profiler.end('streamer.send.queue')
 
         self.last_step = job.step
         
