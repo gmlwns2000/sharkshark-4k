@@ -86,11 +86,15 @@ class TwitchRecoder:
             frames = []
             for i in range(self.batch_sec * self.fps):
                 frame = image_grabber.grab()
+                if frame is None: raise Exception('frame recodered None!')
                 if self.output_shape is not None:
                     frame = cv2.resize(frame, dsize=[self.output_shape[1], self.output_shape[0]], interpolation=cv2.INTER_AREA)
                     frame = cv2.putText(frame, f"{self.frame_count}", (10, 64), cv2.FONT_HERSHEY_PLAIN, 1, (255,0,0), 1)
                     self.frame_count += 1
                 frames.append(frame)
+            if len(frames) == 0:
+                print(f'TwitchRecoder: frame does not recorded...')
+                continue
             frames = np.stack(frames, axis=0)
             t_sum.append(time.time()-t)
             if len(t_sum) > 100:

@@ -37,6 +37,9 @@ class _TwitchHandler():
                 if "audio_opus" in stream_hls:
                     print("TwitchHandler: opus selected for audio stream")
                     self.quality = 'audio_opus'
+                elif "audio" in stream_hls:
+                    print("TwitchHandler: audio selected for audio stream")
+                    self.quality = 'audio'
         except streamlink.exceptions.NoPluginError:
             raise ValueError(f"No stream availabe for {self.twitch_url}")
         if self.quality not in stream_hls:

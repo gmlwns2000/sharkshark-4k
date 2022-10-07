@@ -9,33 +9,34 @@ from stream.recoder import TW_DALTA, TW_RUMYONG, TwitchRecoder, TW_MARU, TW_PIAN
 from stream.streamer import TwitchStreamer, TwitchStreamerEntry
 
 class TwitchUpscalerPostStreamer:
-    def __init__(self, url, device=0, fps=12) -> None:
+    def __init__(self, url, device=0, fps=12, denoising=True, lr_level=3, quality='720p60', frame_skips=True) -> None:
         self.url = url
         self.fps = fps
         self.device = device
 
         self.recoder = TwitchRecoder(
             target_url=self.url, batch_sec=1, fps=self.fps, on_queue=self.recoder_on_queue,
-            quality='720p60'
+            quality=quality
         )
         self.batch_size = self.fps
         # self.upscaler = EgvsrUpscalerService(
         #     device=self.device, lr_level=0, on_queue=self.upscaler_on_queue
         # )
         self.upscaler = FsrcnnUpscalerService(
-            device=self.device, lr_level=3, on_queue=self.upscaler_on_queue, denoising=True,
+            device=self.device, lr_level=lr_level, on_queue=self.upscaler_on_queue, denoising=denoising,
         )
         self.recoder.output_shape = self.upscaler.lr_shape
         #self.upscaler.output_shape = (2160, 3840)
         #self.upscaler.output_shape = (1800, 3200)
         self.upscaler.output_shape = (1440, 2560)
+        #self.upscaler.output_shape = (1080, 1920)
         self.streamer = TwitchStreamer(
             on_queue=self.streamer_on_queue, fps=self.fps, resolution=self.upscaler.output_shape, 
             output_file='rtmp://127.0.0.1/live' #'output.flv'
         )
         self.frame_step = 0
         self.last_streamed = time.time()
-        self.frame_skips = True
+        self.frame_skips = frame_skips
     
     def recoder_on_queue(self, entry:RecoderEntry):
         try:
@@ -111,8 +112,14 @@ class TwitchUpscalerPostStreamer:
         self.recoder.join()
 
 if __name__ == '__main__':
+    # pipeline = TwitchUpscalerPostStreamer(
+    #     url = TW_DANCINGSANA, fps = 24, denoising=False, lr_level=3, quality='720p60'
+    # )
+    # pipeline = TwitchUpscalerPostStreamer(
+    #     url = 'https://www.twitch.tv/videos/1609788369', fps = 8, denoising=True, lr_level=3, quality='source', frame_skips=False
+    # )
     pipeline = TwitchUpscalerPostStreamer(
-        url =  TW_VIICHAN, fps = 8
+        url = TW_VIICHAN, fps = 8, denoising=True, lr_level=3, quality='720p60', frame_skips=True
     )
     pipeline.start()
     pipeline.join()

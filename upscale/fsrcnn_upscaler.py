@@ -44,7 +44,7 @@ class FsrcnnUpscalerService(BaseUpscalerService):
             )
             def blur_ker(channels=1):
                 # Set these to whatever you want for your gaussian filter
-                kernel_size = 3
+                kernel_size = 11
                 sigma = 3
 
                 # Create a x, y coordinate grid of shape (kernel_size, kernel_size, 2)
@@ -106,29 +106,42 @@ class FsrcnnUpscalerService(BaseUpscalerService):
                 img, size=self.lr_shape, mode='area'
             ).squeeze(0)
 
-            if self.denoising:
-                __lr_curr = lr_curr
-                _lr_curr = lr_curr.unsqueeze(0).unsqueeze(1)
-                N, F, C, H, W = _lr_curr.shape
-                lr_curr = torch.empty((N, 1, 4, H, W), dtype=_lr_curr.dtype, device=_lr_curr.device)
-                if self.lr_prev is not None:
-                    diff_map = torch.mean(torch.abs(__lr_curr - self.lr_prev), dim=0)
-                    diff_map = self.denoise_blur(diff_map.unsqueeze(0).unsqueeze(0)).squeeze(0).squeeze(0)
-                    diff_map = torch.clamp(diff_map, 0.01, 0.03)
-                    lr_curr[0,0,3,:,:] = diff_map
-                else:
-                    lr_curr.fill_(0.01)
-                lr_curr[:,:,:3,:,:] = _lr_curr
-                with torch.no_grad():
-                    lr_curr = self.denoise_model(lr_curr).squeeze(0).squeeze(0)
-                
-                self.lr_prev = lr_curr.clone()
-            
-            lr_curr = lr_curr.unsqueeze(1)
-            
-            with torch.no_grad():
-                hr_curr = self.model(lr_curr)
+        diff_map = None
 
+        if self.denoising:
+            __lr_curr = lr_curr
+            _lr_curr = lr_curr.unsqueeze(0).unsqueeze(1)
+            N, F, C, H, W = _lr_curr.shape
+            lr_curr = torch.empty((N, 1, 4, H, W), dtype=_lr_curr.dtype, device=_lr_curr.device)
+            if self.lr_prev is not None:
+                with torch.no_grad(), torch.cuda.amp.autocast():
+                    diff_map = torch.mean(torch.abs(__lr_curr - self.lr_prev), dim=0)
+                    diff_map = self.denoise_blur(diff_map.unsqueeze(0).unsqueeze(0)).squeeze(0).squeeze(0) * 10
+                    diff_map = torch.clamp(diff_map, 0.00, 0.1) * 0.75
+                # lr_curr[:,:,:3,:,:] = _lr_curr
+                # lr_curr[0,0,0,:,:] = diff_map
+                # lr_curr[0,0,1,:,:] = diff_map
+                # lr_curr[0,0,2,:,:] = diff_map
+                # lr_curr[0,0,3,:,:] = 0.0
+
+                lr_curr[0,0,3,:,:] = diff_map
+                lr_curr[:,:,:3,:,:] = _lr_curr
+            else:
+                lr_curr.fill_(0.5)
+                lr_curr[:,:,:3,:,:] = _lr_curr
+            with torch.no_grad(), torch.cuda.amp.autocast():
+                lr_curr = self.denoise_model(lr_curr).squeeze(0).squeeze(0)
+            
+            self.lr_prev = lr_curr.clone()
+        
+        # if diff_map is not None:
+        #     lr_curr[:,:,:] *= diff_map.unsqueeze(0) * 10
+        lr_curr = lr_curr.unsqueeze(1)
+        
+        with torch.no_grad(), torch.cuda.amp.autocast():
+            hr_curr = self.model(lr_curr)
+
+        with torch.no_grad(), torch.cuda.amp.autocast():
             _hr_curr = torch.clamp(hr_curr, 0, 1)
             if self.output_shape is not None:
                 if self.output_shape[0] >= _hr_curr.shape[0]:

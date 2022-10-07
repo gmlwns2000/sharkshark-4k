@@ -74,7 +74,8 @@ class TwitchImageGrabber(_TwitchHandlerVideo, _TwitchHandlerGrabber):
         '720p': (1280, 720),
         '720p60': (1280, 720),
         '1080p': (1920, 1080),
-        '1080p60': (1920, 1080)
+        '1080p60': (1920, 1080),
+        'source': (1920,1080)
     }
 
     def __post_init__(self):
