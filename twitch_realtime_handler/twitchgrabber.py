@@ -86,6 +86,7 @@ class TwitchImageGrabber(_TwitchHandlerVideo, _TwitchHandlerGrabber):
         self.get_stream_url()
         self._cmd_pipe = ["ffmpeg",
                           "-i", self._stream_url,
+                          "-threads", "16",
                           "-f", "image2pipe",
                           "-r", f"{self.rate}",
                           "-pix_fmt", "rgb24",

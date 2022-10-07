@@ -102,7 +102,10 @@ class TwitchStreamer(BaseService):
         audio_seg = job.audio_segments
         if isinstance(audio_seg, torch.Tensor):
             audio_seg = audio_seg.numpy()
-        videostream.send_audio(audio_seg[:,0], audio_seg[:,1])
+        batch_size = len(job.frames)
+        for i in range(batch_size):
+            seg = audio_seg[i*(audio_seg.shape[0]//batch_size):(i+1)*(audio_seg.shape[0]//batch_size)]
+            videostream.send_audio(seg[:,0], seg[:,1])
         job.profiler.end('streamer.audio.queue')
 
         self.last_step = job.step

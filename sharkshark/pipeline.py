@@ -110,7 +110,7 @@ class TwitchUpscalerPostStreamer:
 
 if __name__ == '__main__':
     pipeline = TwitchUpscalerPostStreamer(
-        url = TW_MARU, fps = 24
+        url = TW_MAOU, fps = 24
     )
     pipeline.start()
     pipeline.join()

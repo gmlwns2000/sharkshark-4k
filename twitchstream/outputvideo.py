@@ -101,7 +101,7 @@ class TwitchOutputStream(object):
             # size of one frame
             '-s', '%dx%d' % (self.width, self.height),
             '-pix_fmt', 'rgb24',  # The input are raw bytes
-            '-thread_queue_size', '1024',
+            '-thread_queue_size', '16384',
             '-i', '-',  # The input comes from a pipe
 
             # Twitch needs to receive sound in their streams!
@@ -112,7 +112,7 @@ class TwitchOutputStream(object):
                 '-ar', '%d' % AUDIORATE,
                 '-ac', '2',
                 '-f', 's16le',
-                '-thread_queue_size', '1024',
+                '-thread_queue_size', '16384',
                 '-i', '/tmp/audiopipe'
             ])
         else:
@@ -124,27 +124,27 @@ class TwitchOutputStream(object):
             # VIDEO CODEC PARAMETERS
             '-vcodec', 'libx264',
             '-r', '%d' % self.fps,
-            '-b:v', '25000k',
+            '-b:v', '15000k',
             '-s', '%dx%d' % (self.width, self.height),
-            '-preset', 'veryfast', '-tune', 'zerolatency',
+            '-preset', 'medium', '-tune', 'zerolatency',
             '-crf', '16',
             '-pix_fmt', 'yuv420p',
             # '-force_key_frames', r'expr:gte(t,n_forced*2)',
-            '-minrate', '25000k', '-maxrate', '25000k',
-            '-bufsize', '80000k',
-            '-g', '10',     # key frame distance
-            '-keyint_min', '1',
+            '-minrate', '15000k', '-maxrate', '15000k',
+            '-bufsize', '75000k',
+            '-g', '60',     # key frame distance
+            #'-keyint_min', '1',
             # '-filter:v "setpts=0.25*PTS"'
             # '-vsync','passthrough',
 
             # AUDIO CODEC PARAMETERS
             '-acodec', 'libmp3lame', '-ar', '44100', '-b:a', '160k',
-            # '-bufsize', '8192k',
+            #'-bufsize', '480k',
             '-ac', '1',
             # '-acodec', 'aac', '-strict', 'experimental',
             # '-ab', '128k', '-ar', '44100', '-ac', '1',
-            # '-async','44100',
-            #'-filter_complex', 'asplit', #for audio sync?
+            #'-async','132300',
+            # '-filter_complex', 'asplit', #for audio sync?
 
             # STORE THE VIDEO PARAMETERS
             # '-vcodec', 'libx264', '-s', '%dx%d'%(width, height),
@@ -156,7 +156,7 @@ class TwitchOutputStream(object):
             '-map', '0:v', '-map', '1:a',
 
             # NUMBER OF THREADS
-            '-threads', '16',
+            '-threads', '24',
 
             # STREAM TO TWITCH
             '-f', 'flv', self.output_file if self.output_file is not None else self.get_closest_ingest(),
@@ -328,7 +328,7 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
         self.last_frame_time = None
         self.next_video_send_time = None
         self.frame_counter = 0
-        self.q_video = queue.PriorityQueue(maxsize=1)
+        self.q_video = queue.PriorityQueue(maxsize=100)
 
         # don't call the functions directly, as they block on the first
         # call
@@ -344,7 +344,7 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
             self.last_audio_time = None
             self.next_audio_send_time = None
             self.audio_frame_counter = 0
-            self.q_audio = queue.PriorityQueue(maxsize=1)
+            self.q_audio = queue.PriorityQueue(maxsize=100)
             self.t = threading.Timer(0.0, self._send_audio)
             self.t.daemon = True
             self.t.start()
