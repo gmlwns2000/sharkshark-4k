@@ -42,7 +42,7 @@ class TwitchStreamer(BaseService):
             height=self.resolution[0],
             fps=self.fps,
             enable_audio=True,
-            verbose=False,
+            verbose=True,
             output_file=self.output_file
         ) as videostream:
         # TwitchChatStream(
@@ -84,7 +84,10 @@ class TwitchStreamer(BaseService):
                 #print(f"TwitchStreamer.proc: {frame.shape} {frame.device}")
                 if frame.shape != (*self.resolution, 3):
                     print('missmatch', frame.shape, self.resolution)
-                    frame = torch.nn.functional.interpolate(frame, self.resolution, mode='area')
+                    if frame.shape[0] >= self.resolution[0]:
+                        frame = torch.nn.functional.interpolate(frame, self.resolution, mode='area')
+                    else:
+                        frame = torch.nn.functional.interpolate(frame, self.resolution, mode='bicubic')
                 if frame.device != 'cpu':
                     frame = frame.cpu()
                 frame = frame.numpy().astype(np.uint8)

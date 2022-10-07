@@ -23,9 +23,11 @@ class TwitchUpscalerPostStreamer:
         #     device=self.device, lr_level=0, on_queue=self.upscaler_on_queue
         # )
         self.upscaler = FsrcnnUpscalerService(
-            device=self.device, lr_level=3, on_queue=self.upscaler_on_queue
+            device=self.device, lr_level=3, on_queue=self.upscaler_on_queue, denoising=True,
         )
         self.recoder.output_shape = self.upscaler.lr_shape
+        #self.upscaler.output_shape = (2160, 3840)
+        #self.upscaler.output_shape = (1800, 3200)
         self.upscaler.output_shape = (1440, 2560)
         self.streamer = TwitchStreamer(
             on_queue=self.streamer_on_queue, fps=self.fps, resolution=self.upscaler.output_shape, 
@@ -110,7 +112,7 @@ class TwitchUpscalerPostStreamer:
 
 if __name__ == '__main__':
     pipeline = TwitchUpscalerPostStreamer(
-        url = TW_MAOU, fps = 24
+        url =  TW_VIICHAN, fps = 8
     )
     pipeline.start()
     pipeline.join()

@@ -1,8 +1,9 @@
-import time, torch, cv2, gc, tqdm
+import time, torch, cv2, gc, tqdm, math
 from wsgiref.headers import tspecials
 from matplotlib import pyplot as plt
 import numpy as np
 from upscale.model.fsrcnn.factory import build_model
+from upscale.model.bsvd.factory import build_model as build_denoise_model
 
 torch.hub._validate_not_a_forked_repo=lambda a,b,c: True
 torch.backends.cudnn.benchmark = True
@@ -13,7 +14,7 @@ def log(*args, **kwargs):
     print(f"FsrcnnUpscalerService: {' '.join([str(a) for a in args])}", **kwargs)
 
 class FsrcnnUpscalerService(BaseUpscalerService):
-    def __init__(self, lr_level=3, device=0, on_queue=None):
+    def __init__(self, lr_level=3, device=0, on_queue=None, denoising=True):
         self.lr_shape = [
             (360, 640),
             (540, 960),
@@ -27,13 +28,56 @@ class FsrcnnUpscalerService(BaseUpscalerService):
         self.on_queue = on_queue
         self.output_shape = None
 
+        self.denoising = denoising
+
         super().__init__()
     
     def proc_init(self):
         log('proc init')
+        self.lr_prev = None
         self.model = build_model(
             factor=self.scale, device=self.device
         ).eval()
+        if self.denoising:
+            self.denoise_model = build_denoise_model(
+                device=self.device
+            )
+            def blur_ker(channels=1):
+                # Set these to whatever you want for your gaussian filter
+                kernel_size = 3
+                sigma = 3
+
+                # Create a x, y coordinate grid of shape (kernel_size, kernel_size, 2)
+                x_cord = torch.arange(kernel_size)
+                x_grid = x_cord.repeat(kernel_size).view(kernel_size, kernel_size)
+                y_grid = x_grid.t()
+                xy_grid = torch.stack([x_grid, y_grid], dim=-1)
+
+                mean = (kernel_size - 1)/2.
+                variance = sigma**2.
+
+                # Calculate the 2-dimensional gaussian kernel which is
+                # the product of two gaussian distributions for two different
+                # variables (in this case called x and y)
+                gaussian_kernel = (1./(2.*math.pi*variance)) *\
+                                torch.exp(
+                                    -torch.sum((xy_grid - mean)**2., dim=-1) /\
+                                    (2*variance)
+                                )
+                # Make sure sum of values in gaussian kernel equals 1.
+                gaussian_kernel = gaussian_kernel / torch.sum(gaussian_kernel)
+
+                # Reshape to 2d depthwise convolutional weight
+                gaussian_kernel = gaussian_kernel.view(1, 1, kernel_size, kernel_size)
+                gaussian_kernel = gaussian_kernel.repeat(channels, 1, 1, 1)
+
+                gaussian_filter = torch.nn.Conv2d(in_channels=channels, out_channels=channels,
+                                            kernel_size=kernel_size, groups=channels, bias=False, padding=kernel_size//2, padding_mode='reflect')
+
+                gaussian_filter.weight.data = gaussian_kernel
+                gaussian_filter.weight.requires_grad = False
+                return gaussian_filter
+            self.denoise_blur = blur_ker().half().to(self.device)
         log('model loaded')
     
     def proc_cleanup(self):
@@ -55,18 +99,45 @@ class FsrcnnUpscalerService(BaseUpscalerService):
             raise Exception(frames.shape)
     
     def upscale_single(self, img:torch.Tensor):
-        with torch.no_grad():
-            img = img.permute(2,0,1).unsqueeze(1)
+        with torch.cuda.amp.autocast():
+            img = img.permute(2,0,1).unsqueeze(0)
             img = img / 255.0
             lr_curr = torch.nn.functional.interpolate(
                 img, size=self.lr_shape, mode='area'
-            )
+            ).squeeze(0)
+
+            if self.denoising:
+                __lr_curr = lr_curr
+                _lr_curr = lr_curr.unsqueeze(0).unsqueeze(1)
+                N, F, C, H, W = _lr_curr.shape
+                lr_curr = torch.empty((N, 1, 4, H, W), dtype=_lr_curr.dtype, device=_lr_curr.device)
+                if self.lr_prev is not None:
+                    diff_map = torch.mean(torch.abs(__lr_curr - self.lr_prev), dim=0)
+                    diff_map = self.denoise_blur(diff_map.unsqueeze(0).unsqueeze(0)).squeeze(0).squeeze(0)
+                    diff_map = torch.clamp(diff_map, 0.01, 0.03)
+                    lr_curr[0,0,3,:,:] = diff_map
+                else:
+                    lr_curr.fill_(0.01)
+                lr_curr[:,:,:3,:,:] = _lr_curr
+                with torch.no_grad():
+                    lr_curr = self.denoise_model(lr_curr).squeeze(0).squeeze(0)
+                
+                self.lr_prev = lr_curr.clone()
             
-            hr_curr = self.model(lr_curr)
+            lr_curr = lr_curr.unsqueeze(1)
+            
+            with torch.no_grad():
+                hr_curr = self.model(lr_curr)
 
             _hr_curr = torch.clamp(hr_curr, 0, 1)
             if self.output_shape is not None:
-                _hr_curr = torch.nn.functional.interpolate(
-                    _hr_curr, size=self.output_shape, mode='area'
-                )
+                if self.output_shape[0] >= _hr_curr.shape[0]:
+                    _hr_curr = torch.nn.functional.interpolate(
+                        _hr_curr, size=self.output_shape, mode='bicubic'
+                    )
+                else:
+                    _hr_curr = torch.nn.functional.interpolate(
+                        _hr_curr, size=self.output_shape, mode='area'
+                    )
+            _hr_curr = torch.clamp(_hr_curr, 0, 1)
             return (_hr_curr * 255)[:,0,:,:].permute(1,2,0).to(torch.uint8)
