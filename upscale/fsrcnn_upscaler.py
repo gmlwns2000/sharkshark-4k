@@ -14,15 +14,17 @@ def log(*args, **kwargs):
     print(f"FsrcnnUpscalerService: {' '.join([str(a) for a in args])}", **kwargs)
 
 class FsrcnnUpscalerService(BaseUpscalerService):
-    def __init__(self, lr_level=3, device=0, on_queue=None, denoising=True):
+    def __init__(self, lr_level=3, device=0, on_queue=None, denoising=True, denoise_rate=1.0):
         self.lr_shape = [
             (360, 640),
             (540, 960),
             (630, 1120),
             (720, 1280),
+            (900, 1600),
             (1080, 1920),
         ][lr_level]
         self.scale = 4
+        self.denoise_rate = denoise_rate
         self.hr_shape = tuple([i * self.scale for i in self.lr_shape])
         self.hr_shape = (1440, 2560)
         self.device = device
@@ -118,7 +120,7 @@ class FsrcnnUpscalerService(BaseUpscalerService):
                 with torch.no_grad(), torch.cuda.amp.autocast():
                     diff_map = torch.mean(torch.abs(__lr_curr - self.lr_prev), dim=0)
                     diff_map = self.denoise_blur(diff_map.unsqueeze(0).unsqueeze(0)).squeeze(0).squeeze(0) * 10
-                    diff_map = torch.clamp(diff_map, 0.00, 0.1) * 0.35
+                    diff_map = torch.clamp(diff_map, 0.00, 0.1) * 0.35 * self.denoise_rate
                 # lr_curr[:,:,:3,:,:] = _lr_curr
                 # lr_curr[0,0,0,:,:] = diff_map
                 # lr_curr[0,0,1,:,:] = diff_map

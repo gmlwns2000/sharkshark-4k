@@ -9,7 +9,7 @@ from stream.recoder import TW_DALTA, TW_RUMYONG, TW_SHYLILY, TwitchRecoder, TW_M
 from stream.streamer import TwitchStreamer, TwitchStreamerEntry
 
 class TwitchUpscalerPostStreamer:
-    def __init__(self, url, device=0, fps=12, denoising=True, lr_level=3, hr_level=0, quality='720p60', frame_skips=True, output_file='rtmp://127.0.0.1/live') -> None:
+    def __init__(self, url, device=0, fps=12, denoising=True, denoise_rate=1.0, lr_level=3, hr_level=0, quality='720p60', frame_skips=True, output_file='rtmp://127.0.0.1/live') -> None:
         self.url = url
         self.fps = fps
         self.device = device
@@ -23,7 +23,7 @@ class TwitchUpscalerPostStreamer:
         #     device=self.device, lr_level=0, on_queue=self.upscaler_on_queue
         # )
         self.upscaler = FsrcnnUpscalerService(
-            device=self.device, lr_level=lr_level, on_queue=self.upscaler_on_queue, denoising=denoising,
+            device=self.device, lr_level=lr_level, on_queue=self.upscaler_on_queue, denoising=denoising, denoise_rate=denoise_rate
         )
         self.recoder.output_shape = self.upscaler.lr_shape
         #self.upscaler.output_shape = (2160, 3840)
@@ -131,7 +131,8 @@ if __name__ == '__main__':
     # )
 
     pipeline = TwitchUpscalerPostStreamer(
-        url = 'https://www.twitch.tv/videos/1610992145', fps = 60, denoising=True, lr_level=3, hr_level=1, quality='1080p60', frame_skips=False, output_file='output.flv'
+        url = 'https://www.twitch.tv/videos/1610992145', fps = 60, denoising=True, lr_level=4, hr_level=1, denoise_rate=2.0,
+        quality='1080p60', frame_skips=False, output_file='output.flv'
     )
     
     pipeline.start()
