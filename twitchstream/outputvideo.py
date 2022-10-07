@@ -127,20 +127,20 @@ class TwitchOutputStream(object):
             '-r', '%d' % self.fps,
             '-b:v', bitrate,
             '-s', '%dx%d' % (self.width, self.height),
-            '-preset', 'faster', #'-tune', 'zerolatency',
+            '-preset', 'medium', #'-tune', 'zerolatency',
             '-crf', '16',
             '-pix_fmt', 'yuv420p',
             # '-force_key_frames', r'expr:gte(t,n_forced*2)',
             '-minrate', bitrate, '-maxrate', bitrate,
-            '-bufsize', '75000k',
+            '-bufsize', '54000k',
             '-g', '2',     # key frame distance
             #'-keyint_min', '1',
             # '-filter:v "setpts=0.25*PTS"'
             # '-vsync','passthrough',
 
             # AUDIO CODEC PARAMETERS
-            '-acodec', 'libmp3lame', '-ar', '44100', '-b:a', '160k',
-            #'-bufsize', '480k',
+            '-acodec', 'libmp3lame', '-ar', '44100', '-b:a', '320k',
+            '-bufsize', '960k',
             '-ac', '1',
             # '-acodec', 'aac', '-strict', 'experimental',
             # '-ab', '128k', '-ar', '44100', '-ac', '1',
@@ -359,14 +359,17 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
             frame = frame[1]
         except IndexError:
             frame = self.last_frame
+            frame = None
         except queue.Empty:
             frame = self.last_frame
+            frame = None
         else:
             self.last_frame = frame
 
         try:
-            super(TwitchBufferedOutputStream, self
-                  ).send_video_frame(frame)
+            if frame is not None:
+                super(TwitchBufferedOutputStream, self
+                    ).send_video_frame(frame)
         except OSError:
             # stream has been closed.
             # This function is still called once when that happens.
@@ -404,14 +407,17 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
             _, left_audio, right_audio = self.q_audio.get_nowait()
         except IndexError:
             left_audio, right_audio = self.last_audio
+            left_audio = right_audio = None
         except queue.Empty:
             left_audio, right_audio = self.last_audio
+            left_audio = right_audio = None
         else:
             self.last_audio = (left_audio, right_audio)
 
         try:
-            super(TwitchBufferedOutputStream, self
-                  ).send_audio(left_audio, right_audio)
+            if left_audio is not None:
+                super(TwitchBufferedOutputStream, self
+                    ).send_audio(left_audio, right_audio)
         except OSError:
             # stream has been closed.
             # This function is still called once when that happens.
@@ -420,7 +426,10 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
             return
 
         # send the next frame at the appropriate time
-        downstream_time = len(left_audio) / AUDIORATE
+        if left_audio is None:
+            downstream_time = 0.0001
+        else:
+            downstream_time = len(left_audio) / AUDIORATE
 
         if self.next_audio_send_time is None:
             self.t = threading.Timer(downstream_time,

@@ -72,6 +72,7 @@ class TwitchImageGrabber(_TwitchHandlerVideo, _TwitchHandlerGrabber):
         '360p': (640, 360),
         '480p': (854, 480),
         '720p': (1280, 720),
+        '720p48': (1280, 720),
         '720p60': (1280, 720),
         '1080p': (1920, 1080),
         '1080p60': (1920, 1080),
@@ -87,6 +88,7 @@ class TwitchImageGrabber(_TwitchHandlerVideo, _TwitchHandlerGrabber):
         self.get_stream_url()
         self._cmd_pipe = ["ffmpeg",
                           "-i", self._stream_url,
+                          #'-tune', 'fastdecode',
                           "-threads", "16",
                           "-f", "image2pipe",
                           "-r", f"{self.rate}",

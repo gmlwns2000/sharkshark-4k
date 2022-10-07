@@ -20,6 +20,7 @@ class FsrcnnUpscalerService(BaseUpscalerService):
             (540, 960),
             (630, 1120),
             (720, 1280),
+            (1080, 1920),
         ][lr_level]
         self.scale = 4
         self.hr_shape = tuple([i * self.scale for i in self.lr_shape])
