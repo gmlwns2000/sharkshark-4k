@@ -131,14 +131,14 @@ if __name__ == '__main__':
     #     url = TW_SHYLILY, fps = 30, denoising=False, lr_level=3, quality='720p48', frame_skips=True
     # )
 
-    pipeline = TwitchUpscalerPostStreamer(
-        url = TW_VIICHAN, fps = 8, denoising=True, lr_level=3, quality='720p60', frame_skips=True, denoise_rate=2.0
-    )
-
     # pipeline = TwitchUpscalerPostStreamer(
-    #     url = 'https://www.twitch.tv/videos/1610992145', fps = 60, denoising=True, lr_level=4, hr_level=1, denoise_rate=2.0,
-    #     quality='1080p60', frame_skips=False, output_file='output.flv'
+    #     url = TW_VIICHAN, fps = 8, denoising=True, lr_level=3, quality='720p60', frame_skips=True, denoise_rate=2.0
     # )
+
+    pipeline = TwitchUpscalerPostStreamer(
+        url = 'https://www.twitch.tv/videos/1610992145', fps = 24, denoising=True, lr_level=4, hr_level=1, denoise_rate=2.0,
+        quality='1080p60', frame_skips=False, output_file='output.flv'
+    )
     
     pipeline.start()
     pipeline.join()

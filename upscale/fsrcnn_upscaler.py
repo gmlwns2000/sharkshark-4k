@@ -108,7 +108,7 @@ class FsrcnnUpscalerService(BaseUpscalerService):
         log('proc init')
         self.lr_prev = None
         self.model = build_model(
-            factor=self.scale, device=self.device
+            factor=self.scale, device=self.device, input_shape=self.lr_shape
         ).eval()
         if self.denoising:
             self.denoise_model = build_denoise_model(

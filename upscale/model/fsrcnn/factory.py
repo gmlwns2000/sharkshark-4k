@@ -2,7 +2,7 @@ import torch
 from torch import nn
 import upscale.model.fsrcnn.model as models
 
-def build_model(factor=4, device=0):
+def build_model(factor=4, device=0, input_shape=(720,1280)):
     model = models.FSRCNN(4)
     if factor == 4:
         state = torch.load('upscale/model/fsrcnn/fsrcnn_x4-T91.pth', map_location='cpu')
@@ -49,8 +49,8 @@ def build_model(factor=4, device=0):
         torch_tensorrt.logging.set_reportable_log_level(torch_tensorrt.logging.Level.Debug)
         version = '1'
 
-        lr_curr = torch.empty((3, 1, 720, 1280), dtype=torch.half, device=device)
-        N, C, H, W = lr_curr.shape
+        # lr_curr = torch.empty((3, 1, 720, 1280), dtype=torch.half, device=device)
+        N, C, H, W = (3, 1, *input_shape)
 
         ts_path = f"./saves/models/fsrcnn_{version}_{N}x{C}x{W}x{H}.pts"
 
@@ -60,7 +60,7 @@ def build_model(factor=4, device=0):
             print('FsrcnnUpscaler.build_model: Compiling...')
             trt_model = torch_tensorrt.compile(model, 
                 inputs= [
-                    torch_tensorrt.Input(lr_curr.shape),
+                    torch_tensorrt.Input((N, C, H, W)),
                 ],
                 enabled_precisions= { torch_tensorrt.dtype.half } # Run with FP16
             )
@@ -84,7 +84,7 @@ class JitWrapper(nn.Module):
 if __name__ == '__main__':
     import torch, time, tqdm
 
-    model = build_model()
+    model = build_model(input_shape=(900,1600))
     batch = torch.zeros((3,1,720,1280), dtype=torch.float32, device=0)
     
     def run(n=100):
