@@ -126,14 +126,15 @@ if __name__ == '__main__':
     # pipeline = TwitchUpscalerPostStreamer(
     #     url = 'https://www.twitch.tv/videos/1609788369', fps = 8, denoising=True, lr_level=3, quality='source', frame_skips=False
     # )
-    # pipeline = TwitchUpscalerPostStreamer(
-    #     url = TW_SHYLILY, fps = 8, denoising=True, lr_level=3, quality='720p48', frame_skips=True
-    # )
 
     pipeline = TwitchUpscalerPostStreamer(
-        url = 'https://www.twitch.tv/videos/1610992145', fps = 60, denoising=True, lr_level=4, hr_level=1, denoise_rate=2.0,
-        quality='1080p60', frame_skips=False, output_file='output.flv'
+        url = TW_SHARK, fps = 8, denoising=True, lr_level=3, quality='720p60', frame_skips=True
     )
+
+    # pipeline = TwitchUpscalerPostStreamer(
+    #     url = 'https://www.twitch.tv/videos/1610992145', fps = 60, denoising=True, lr_level=4, hr_level=1, denoise_rate=2.0,
+    #     quality='1080p60', frame_skips=False, output_file='output.flv'
+    # )
     
     pipeline.start()
     pipeline.join()
