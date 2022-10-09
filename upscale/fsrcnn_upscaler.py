@@ -13,6 +13,72 @@ from .upscaler_base import BaseUpscalerService, UpscalerQueueEntry
 def log(*args, **kwargs):
     print(f"FsrcnnUpscalerService: {' '.join([str(a) for a in args])}", **kwargs)
 
+def blur_ker(channels=1, kernel_size = 11, sigma = 3):
+    # Set these to whatever you want for your gaussian filter
+
+    # Create a x, y coordinate grid of shape (kernel_size, kernel_size, 2)
+    x_cord = torch.arange(kernel_size)
+    x_grid = x_cord.repeat(kernel_size).view(kernel_size, kernel_size)
+    y_grid = x_grid.t()
+    xy_grid = torch.stack([x_grid, y_grid], dim=-1)
+
+    mean = (kernel_size - 1)/2.
+    variance = sigma**2.
+
+    # Calculate the 2-dimensional gaussian kernel which is
+    # the product of two gaussian distributions for two different
+    # variables (in this case called x and y)
+    gaussian_kernel = (1./(2.*math.pi*variance)) *\
+                    torch.exp(
+                        -torch.sum((xy_grid - mean)**2., dim=-1) /\
+                        (2*variance)
+                    )
+    # Make sure sum of values in gaussian kernel equals 1.
+    gaussian_kernel = gaussian_kernel / torch.sum(gaussian_kernel)
+
+    # Reshape to 2d depthwise convolutional weight
+    gaussian_kernel = gaussian_kernel.view(1, 1, kernel_size, kernel_size)
+    gaussian_kernel = gaussian_kernel.repeat(channels, 1, 1, 1)
+
+    gaussian_filter = torch.nn.Conv2d(in_channels=channels, out_channels=channels,
+                                kernel_size=kernel_size, groups=channels, bias=False, padding=kernel_size//2, padding_mode='reflect')
+
+    gaussian_filter.weight.data = gaussian_kernel
+    gaussian_filter.weight.requires_grad = False
+    return gaussian_filter
+
+def sharpen_ker(channels=1, strength=1.0):
+    kernel_size = 3
+
+    assert channels == 1
+    gaussian_kernel_sharp = torch.tensor([
+        [-1,-1,-1],
+        [-1, 9,-1],
+        [-1,-1,-1],
+    ])
+
+    gaussian_kernel_id = torch.tensor([
+        [0,0,0],
+        [0,1,0],
+        [0,0,0],
+    ])
+
+    gaussian_kernel = gaussian_kernel_sharp * strength + (1-strength) * gaussian_kernel_id
+
+    gaussian_kernel = gaussian_kernel / torch.sum(gaussian_kernel)
+    gaussian_kernel = gaussian_kernel.view(1, 1, kernel_size, kernel_size)
+    gaussian_kernel = gaussian_kernel.repeat(channels, 1, 1, 1)
+
+    gaussian_filter = torch.nn.Conv2d(
+        in_channels=channels, out_channels=channels,
+        kernel_size=kernel_size, groups=channels, bias=False, 
+        padding=kernel_size//2, padding_mode='reflect'
+    )
+
+    gaussian_filter.weight.data = gaussian_kernel
+    gaussian_filter.weight.requires_grad = False
+    return gaussian_filter
+
 class FsrcnnUpscalerService(BaseUpscalerService):
     def __init__(self, lr_level=3, device=0, on_queue=None, denoising=True, denoise_rate=1.0):
         self.lr_shape = [
@@ -45,42 +111,9 @@ class FsrcnnUpscalerService(BaseUpscalerService):
             self.denoise_model = build_denoise_model(
                 device=self.device
             )
-            def blur_ker(channels=1):
-                # Set these to whatever you want for your gaussian filter
-                kernel_size = 11
-                sigma = 3
-
-                # Create a x, y coordinate grid of shape (kernel_size, kernel_size, 2)
-                x_cord = torch.arange(kernel_size)
-                x_grid = x_cord.repeat(kernel_size).view(kernel_size, kernel_size)
-                y_grid = x_grid.t()
-                xy_grid = torch.stack([x_grid, y_grid], dim=-1)
-
-                mean = (kernel_size - 1)/2.
-                variance = sigma**2.
-
-                # Calculate the 2-dimensional gaussian kernel which is
-                # the product of two gaussian distributions for two different
-                # variables (in this case called x and y)
-                gaussian_kernel = (1./(2.*math.pi*variance)) *\
-                                torch.exp(
-                                    -torch.sum((xy_grid - mean)**2., dim=-1) /\
-                                    (2*variance)
-                                )
-                # Make sure sum of values in gaussian kernel equals 1.
-                gaussian_kernel = gaussian_kernel / torch.sum(gaussian_kernel)
-
-                # Reshape to 2d depthwise convolutional weight
-                gaussian_kernel = gaussian_kernel.view(1, 1, kernel_size, kernel_size)
-                gaussian_kernel = gaussian_kernel.repeat(channels, 1, 1, 1)
-
-                gaussian_filter = torch.nn.Conv2d(in_channels=channels, out_channels=channels,
-                                            kernel_size=kernel_size, groups=channels, bias=False, padding=kernel_size//2, padding_mode='reflect')
-
-                gaussian_filter.weight.data = gaussian_kernel
-                gaussian_filter.weight.requires_grad = False
-                return gaussian_filter
             self.denoise_blur = blur_ker().half().to(self.device)
+            self.denoise_sharpen = sharpen_ker(strength=0.01).half().to(self.device)
+            self.denoise_sharpen_hr = sharpen_ker(strength=0.05).half().to(self.device)
         log('model loaded')
     
     def proc_cleanup(self):
@@ -130,11 +163,12 @@ class FsrcnnUpscalerService(BaseUpscalerService):
                 lr_curr[0,0,3,:,:] = diff_map
                 lr_curr[:,:,:3,:,:] = _lr_curr
             else:
-                lr_curr.fill_(0.5)
+                lr_curr.fill_(0.05)
                 lr_curr[:,:,:3,:,:] = _lr_curr
             with torch.no_grad(), torch.cuda.amp.autocast():
                 lr_curr = self.denoise_model(lr_curr).squeeze(0).squeeze(0)
-            
+                C, H, W = lr_curr.shape
+                lr_curr = torch.clamp(self.denoise_sharpen(lr_curr.view(C, 1, H, W)).view(C, H, W), 0, 1)
             self.lr_prev = lr_curr.clone()
         
         # if diff_map is not None:
@@ -143,6 +177,7 @@ class FsrcnnUpscalerService(BaseUpscalerService):
         
         with torch.no_grad(), torch.cuda.amp.autocast():
             hr_curr = self.model(lr_curr)
+            hr_curr = torch.clamp(self.denoise_sharpen_hr(hr_curr), 0, 1)
 
         with torch.no_grad(), torch.cuda.amp.autocast():
             _hr_curr = torch.clamp(hr_curr, 0, 1)
