@@ -4,6 +4,7 @@ class Profiler:
     def __init__(self) -> None:
         self.start_ticks = {}
         self.data = {}
+        self.elapsed_ticks = {}
     
     def set(self, name, value):
         self.data[name] = value
@@ -16,7 +17,9 @@ class Profiler:
             ticks = self.start_ticks[name]
             del self.start_ticks[name]
             elapsed = time.time() - ticks
-            self.data[name] = elapsed
+            previous_elapsed = self.elapsed_ticks.get(name, (0,0))
+            self.elapsed_ticks[name] = (previous_elapsed[0] + elapsed, previous_elapsed[1] + 1)
+            self.data[name] = (self.elapsed_ticks[name][0] / self.elapsed_ticks[name][1])
         else:
             elapsed = -1
             #print(f'Profiler: "{name}" is not started region.')

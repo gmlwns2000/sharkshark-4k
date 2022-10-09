@@ -24,6 +24,7 @@ class UpscalerQueueEntry:
     profiler: Profiler = None
 
 class BaseUpscalerService(BaseService):
+    profiler: Profiler
     on_queue = None
 
     def __init__(self) -> None:
@@ -35,6 +36,8 @@ class BaseUpscalerService(BaseService):
 
     #@abs.abstractmethod
     def proc_job_recieved(self, job: UpscalerQueueEntry):
+        self.profiler = job.profiler
+        
         t = time.time()
         job.profiler.end('recoder.output')
         frames = job.frames

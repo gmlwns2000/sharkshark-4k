@@ -4,6 +4,7 @@ from matplotlib import pyplot as plt
 import numpy as np
 from upscale.model.fsrcnn.factory import build_model
 from upscale.model.bsvd.factory import build_model as build_denoise_model
+from util.profiler import Profiler
 
 torch.hub._validate_not_a_forked_repo=lambda a,b,c: True
 torch.backends.cudnn.benchmark = True
@@ -80,6 +81,8 @@ def sharpen_ker(channels=1, strength=1.0):
     return gaussian_filter
 
 class FsrcnnUpscalerService(BaseUpscalerService):
+    profiler: Profiler
+
     def __init__(self, lr_level=3, device=0, on_queue=None, denoising=True, denoise_rate=1.0):
         self.lr_shape = [
             (360, 640),
@@ -166,9 +169,11 @@ class FsrcnnUpscalerService(BaseUpscalerService):
                 lr_curr.fill_(0.05)
                 lr_curr[:,:,:3,:,:] = _lr_curr
             with torch.no_grad(), torch.cuda.amp.autocast():
+                self.profiler.start('fsrcnn.denoise')
                 lr_curr = self.denoise_model(lr_curr).squeeze(0).squeeze(0)
                 C, H, W = lr_curr.shape
                 lr_curr = torch.clamp(self.denoise_sharpen(lr_curr.view(C, 1, H, W)).view(C, H, W), 0, 1)
+                self.profiler.end('fsrcnn.denoise')
             self.lr_prev = lr_curr.clone()
         
         # if diff_map is not None:
@@ -176,8 +181,10 @@ class FsrcnnUpscalerService(BaseUpscalerService):
         lr_curr = lr_curr.unsqueeze(1)
         
         with torch.no_grad(), torch.cuda.amp.autocast():
+            self.profiler.start('fsrcnn.model')
             hr_curr = self.model(lr_curr)
             hr_curr = torch.clamp(self.denoise_sharpen_hr(hr_curr), 0, 1)
+            self.profiler.end('fsrcnn.model')
 
         with torch.no_grad(), torch.cuda.amp.autocast():
             _hr_curr = torch.clamp(hr_curr, 0, 1)
