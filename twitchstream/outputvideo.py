@@ -157,7 +157,7 @@ class TwitchOutputStream(object):
             '-map', '0:v', '-map', '1:a',
 
             # NUMBER OF THREADS
-            '-threads', '24',
+            '-threads', '32',
 
             # STREAM TO TWITCH
             '-f', 'flv', self.output_file if self.output_file is not None else self.get_closest_ingest(),

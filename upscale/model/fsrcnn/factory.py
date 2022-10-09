@@ -46,10 +46,10 @@ def build_model(factor=4, device=0):
         model = model_trt
     elif jit_mode == 'trt':
         import torch_tensorrt, os
-        torch_tensorrt.logging.set_reportable_log_level(torch_tensorrt.logging.Level.Info)
-        version = '0'
+        torch_tensorrt.logging.set_reportable_log_level(torch_tensorrt.logging.Level.Debug)
+        version = '1'
 
-        lr_curr = torch.empty((3, 1, 720, 1280), dtype=torch.float32, device=device)
+        lr_curr = torch.empty((3, 1, 720, 1280), dtype=torch.half, device=device)
         N, C, H, W = lr_curr.shape
 
         ts_path = f"./saves/models/fsrcnn_{version}_{N}x{C}x{W}x{H}.pts"
@@ -66,6 +66,7 @@ def build_model(factor=4, device=0):
             )
             model = trt_model
             torch.jit.save(model, ts_path)
+        torch_tensorrt.logging.set_reportable_log_level(torch_tensorrt.logging.Level.Warning)
 
     return model
 

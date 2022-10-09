@@ -127,8 +127,12 @@ if __name__ == '__main__':
     #     url = 'https://www.twitch.tv/videos/1609788369', fps = 8, denoising=True, lr_level=3, quality='source', frame_skips=False
     # )
 
+    # pipeline = TwitchUpscalerPostStreamer(
+    #     url = TW_SHYLILY, fps = 30, denoising=False, lr_level=3, quality='720p48', frame_skips=True
+    # )
+
     pipeline = TwitchUpscalerPostStreamer(
-        url = TW_SHARK, fps = 8, denoising=True, lr_level=3, quality='720p60', frame_skips=True
+        url = TW_VIICHAN, fps = 8, denoising=True, lr_level=3, quality='720p60', frame_skips=True, denoise_rate=2.0
     )
 
     # pipeline = TwitchUpscalerPostStreamer(

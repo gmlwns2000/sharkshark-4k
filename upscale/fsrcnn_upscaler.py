@@ -141,7 +141,7 @@ class FsrcnnUpscalerService(BaseUpscalerService):
         with torch.cuda.amp.autocast():
             img = img.permute(2,0,1).unsqueeze(0)
             img = img / 255.0
-            lr_curr = torch.nn.functional.interpolate(
+            lr_curr_before = lr_curr = torch.nn.functional.interpolate(
                 img, size=self.lr_shape, mode='area'
             ).squeeze(0)
 
@@ -151,30 +151,40 @@ class FsrcnnUpscalerService(BaseUpscalerService):
             __lr_curr = lr_curr
             _lr_curr = lr_curr.unsqueeze(0).unsqueeze(1)
             N, F, C, H, W = _lr_curr.shape
-            lr_curr = torch.empty((N, 1, 4, H, W), dtype=_lr_curr.dtype, device=_lr_curr.device)
+            lr_curr = torch.empty((N, 2, 4, H, W), dtype=_lr_curr.dtype, device=_lr_curr.device)
             if self.lr_prev is not None:
                 with torch.no_grad(), torch.cuda.amp.autocast():
                     diff_map = torch.mean(torch.abs(__lr_curr - self.lr_prev), dim=0)
                     diff_map = self.denoise_blur(diff_map.unsqueeze(0).unsqueeze(0)).squeeze(0).squeeze(0) * 10
                     diff_map = torch.clamp(diff_map, 0.00, 0.1) * 0.35 * self.denoise_rate
+                    #diff_map.fill_(0.1)
                 # lr_curr[:,:,:3,:,:] = _lr_curr
                 # lr_curr[0,0,0,:,:] = diff_map
                 # lr_curr[0,0,1,:,:] = diff_map
                 # lr_curr[0,0,2,:,:] = diff_map
                 # lr_curr[0,0,3,:,:] = 0.0
 
-                lr_curr[0,0,3,:,:] = diff_map
-                lr_curr[:,:,:3,:,:] = _lr_curr
+                lr_curr[0,0,3,:,:] = self.lr_prev_diff_map
+                lr_curr[0,0,:3,:,:] = self.lr_prev
+                lr_curr[0,1,3,:,:] = diff_map
+                lr_curr[0,1,:3,:,:] = _lr_curr
             else:
                 lr_curr.fill_(0.05)
-                lr_curr[:,:,:3,:,:] = _lr_curr
+                lr_curr[0,1,:3,:,:] = _lr_curr
+                diff_map = lr_curr[0,1,3,:,:]
             with torch.no_grad(), torch.cuda.amp.autocast():
+                denoise_opacity = 0.7
+
                 self.profiler.start('fsrcnn.denoise')
-                lr_curr = self.denoise_model(lr_curr).squeeze(0).squeeze(0)
+                before_denoise = lr_curr
+                lr_curr = self.denoise_model(lr_curr[:,1:2,:,:,:])[:,-1,:,:,:].squeeze(0).squeeze(0)
                 C, H, W = lr_curr.shape
                 lr_curr = torch.clamp(self.denoise_sharpen(lr_curr.view(C, 1, H, W)).view(C, H, W), 0, 1)
+
+                lr_curr = lr_curr * denoise_opacity + (1-denoise_opacity) * __lr_curr
                 self.profiler.end('fsrcnn.denoise')
             self.lr_prev = lr_curr.clone()
+            self.lr_prev_diff_map = diff_map.clone()
         
         # if diff_map is not None:
         #     lr_curr[:,:,:] *= diff_map.unsqueeze(0) * 10
@@ -182,11 +192,24 @@ class FsrcnnUpscalerService(BaseUpscalerService):
         
         with torch.no_grad(), torch.cuda.amp.autocast():
             self.profiler.start('fsrcnn.model')
-            hr_curr = self.model(lr_curr)
-            hr_curr = torch.clamp(self.denoise_sharpen_hr(hr_curr), 0, 1)
+            hr_curr = self.model(lr_curr.float())
+            if self.denoising:
+                hr_curr = torch.clamp(self.denoise_sharpen_hr(hr_curr), 0, 1)
             self.profiler.end('fsrcnn.model')
 
         with torch.no_grad(), torch.cuda.amp.autocast():
+            #color distribution match
+            C, F, H, W = hr_curr.shape
+            hr_curr = hr_curr.view(C, H, W)
+            hr_curr_mean = hr_curr.view(C, H*W).mean(dim=-1).view(C, 1, 1)
+            hr_curr_std = hr_curr.view(C, H*W).std(dim=-1).view(C, 1, 1)
+            C, LH, LW = lr_curr_before.shape
+            img_mean = lr_curr_before.view(C, LH*LW).mean(dim=-1).view(C, 1, 1)
+            img_std = lr_curr_before.view(C, LH*LW).std(dim=-1).view(C, 1, 1)
+            hr_curr = (hr_curr - hr_curr_mean) / (hr_curr_std + 1e-8)
+            hr_curr = hr_curr * img_std + img_mean
+            hr_curr = hr_curr.view(C, F, H, W)
+
             _hr_curr = torch.clamp(hr_curr, 0, 1)
             if self.output_shape is not None:
                 if self.output_shape[0] >= _hr_curr.shape[0]:

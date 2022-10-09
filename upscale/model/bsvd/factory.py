@@ -57,9 +57,10 @@ def build_model(device=0):
         model = model_trt
     elif jit_mode == 'trt':
         import torch_tensorrt, os
+        torch_tensorrt.logging.set_reportable_log_level(torch_tensorrt.logging.Level.Debug)
         version = '0'
 
-        lr_curr = torch.empty((1, 1, 4, 540, 960), dtype=torch.float32, device=device)
+        lr_curr = torch.empty((1, 1, 4, 720, 1280), dtype=torch.float32, device=device)
         N, F, C, H, W = lr_curr.shape
 
         ts_path = f"./saves/models/bsvd_{version}_{N}x{F}x{C}x{W}x{H}.pts"
@@ -67,7 +68,7 @@ def build_model(device=0):
         if os.path.exists(ts_path):
             model = torch.jit.load(ts_path)
         else:
-            print('EgvsrUpscaler.build_egvsr_model: Compiling...')
+            print('Bsvd.build_model: Compiling...')
             trt_model = torch_tensorrt.compile(model, 
                 inputs= [
                     torch_tensorrt.Input(lr_curr.shape),
@@ -76,6 +77,7 @@ def build_model(device=0):
             )
             model = trt_model
             torch.jit.save(model, ts_path)
+        torch_tensorrt.logging.set_reportable_log_level(torch_tensorrt.logging.Level.Warning)
 
     skip_repeat = True
     amp_enabled = False
