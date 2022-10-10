@@ -16,6 +16,7 @@ TW_RUMYONG = 'https://www.twitch.tv/lumyon3'
 TW_MAOU = 'https://www.twitch.tv/mawang0216'
 TW_DALTA = 'https://www.twitch.tv/dalta_23'
 TW_VIICHAN = 'https://www.twitch.tv/viichan6'
+TW_ZURURU = 'https://www.twitch.tv/cotton__123'
 TW_SHYLILY = 'https://www.twitch.tv/shylily'
 TW_DANCINGSANA = 'https://www.twitch.tv/dancingshana'
 

@@ -5,7 +5,7 @@ import numpy as np
 from upscale.upscaler_base import UpscalerQueueEntry
 from upscale.egvsr_upscaler import EgvsrUpscalerService
 from upscale.fsrcnn_upscaler import FsrcnnUpscalerService
-from stream.recoder import TW_DALTA, TW_RUMYONG, TW_SHYLILY, TwitchRecoder, TW_MARU, TW_PIANOCAT, TW_SHARK, RecoderEntry, TW_MAOU, TW_VIICHAN, TW_DANCINGSANA
+from stream.recoder import TW_DALTA, TW_RUMYONG, TW_SHYLILY, TW_ZURURU, TwitchRecoder, TW_MARU, TW_PIANOCAT, TW_SHARK, RecoderEntry, TW_MAOU, TW_VIICHAN, TW_DANCINGSANA
 from stream.streamer import TwitchStreamer, TwitchStreamerEntry
 
 class TwitchUpscalerPostStreamer:
@@ -131,14 +131,14 @@ if __name__ == '__main__':
     #     url = TW_SHYLILY, fps = 30, denoising=False, lr_level=3, quality='720p48', frame_skips=True
     # )
 
-    # pipeline = TwitchUpscalerPostStreamer(
-    #     url = TW_VIICHAN, fps = 8, denoising=True, lr_level=3, quality='720p60', frame_skips=True, denoise_rate=2.0
-    # )
-
     pipeline = TwitchUpscalerPostStreamer(
-        url = 'https://www.twitch.tv/videos/1610992145', fps = 24, denoising=True, lr_level=4, hr_level=1, denoise_rate=2.0,
-        quality='1080p60', frame_skips=False, output_file='output.flv'
+        url = TW_ZURURU, fps = 8, denoising=True, lr_level=3, quality='720p60', frame_skips=True, denoise_rate=1.0
     )
+
+    # pipeline = TwitchUpscalerPostStreamer(
+    #     url = 'https://www.twitch.tv/videos/1610992145', fps = 24, denoising=True, lr_level=4, hr_level=1, denoise_rate=2.0,
+    #     quality='1080p60', frame_skips=False, output_file='output.flv'
+    # )
     
     pipeline.start()
     pipeline.join()

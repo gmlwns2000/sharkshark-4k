@@ -14,7 +14,7 @@ from .upscaler_base import BaseUpscalerService, UpscalerQueueEntry
 def log(*args, **kwargs):
     print(f"FsrcnnUpscalerService: {' '.join([str(a) for a in args])}", **kwargs)
 
-def blur_ker(channels=1, kernel_size = 11, sigma = 3):
+def blur_ker(channels=1, kernel_size = 3, sigma = 1):
     # Set these to whatever you want for your gaussian filter
 
     # Create a x, y coordinate grid of shape (kernel_size, kernel_size, 2)
@@ -173,7 +173,7 @@ class FsrcnnUpscalerService(BaseUpscalerService):
                 lr_curr[0,1,:3,:,:] = _lr_curr
                 diff_map = lr_curr[0,1,3,:,:]
             with torch.no_grad(), torch.cuda.amp.autocast():
-                denoise_opacity = 0.7
+                denoise_opacity = 0.8
 
                 self.profiler.start('fsrcnn.denoise')
                 before_denoise = lr_curr
