@@ -2,9 +2,9 @@
 
 Make [SharkShark](https://www.twitch.tv/tizmtizm) into 4K.
 
-Twitch Stream Upscaler 4K
+Twitch Stream Upscaler 4K.
 
-Written by AinL
+Written by AinL.
 
 ![](https://ifh.cc/g/LjbTr2.jpg)
 
@@ -22,6 +22,23 @@ RTX3090ti 두?장만 있다면 실시간으로 4k의 트위치 스트림을 볼 
 
 Upscaler pipeline is designed for handling high noise 720p Twitch stream.
 Therefore, if you want to apply this upscaler to static image, you should reduce or disable denoiser
+
+# Samples
+
+![](./samples/docs/sample1.png)
+[Original Twitch Channel](https://www.twitch.tv/tizmtizm)
+
+![](./samples/docs/sample2.png)
+[Original Twitch Channel](https://www.twitch.tv/tizmtizm)
+
+![](./samples/docs/sample3.png)
+[Original Twitch Channel](https://www.twitch.tv/viichan6)
+
+![](./samples/docs/sample4.png)
+[Original Twitch Channel](https://www.twitch.tv/dancingshana)
+
+![](./samples/docs/sample5.png)
+[Original Twitch Channel](https://www.twitch.tv/mawang0216)
 
 # To-Do
 
