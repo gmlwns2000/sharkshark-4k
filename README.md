@@ -10,9 +10,9 @@ Written by AinL.
 
 # Introduction
 
-트위치 720p에 지친 당신! 깨끗하고 선명하게 샤크샤크를 보고싶으신가요?
+트위치 720p에 지친 당신! 깨끗하고 선명하게 당신의 최애 방송을 보고 싶으신가요?
 
-그렇다면 말 안듣는 트위치 말고 당신의 GPU를 괴롭혀보는건 어떤가요!
+그렇다면 말 안듣는 트위치 말고, 당신의 GPU를 괴롭혀보는건 어떤가요!
 
 RTX3090ti 두?장만 있다면 실시간으로 4k의 트위치 스트림을 볼 수 있답니다! 이제는 RTX4090 한장이면 충분하겠네요 (아마도)!
 
@@ -57,6 +57,6 @@ All writings should be writen in English.
 
 # License
 
-GPL 3.0.
+GPL 3.0
 
 Not allowed to use this program under commercial purposes.
