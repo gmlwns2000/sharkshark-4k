@@ -47,7 +47,7 @@ def build_model(factor=4, device=0, input_shape=(720,1280)):
     elif jit_mode == 'trt':
         import torch_tensorrt, os
         torch_tensorrt.logging.set_reportable_log_level(torch_tensorrt.logging.Level.Debug)
-        version = '1'
+        version = '2'
 
         # lr_curr = torch.empty((3, 1, 720, 1280), dtype=torch.half, device=device)
         N, C, H, W = (3, 1, *input_shape)
@@ -62,7 +62,8 @@ def build_model(factor=4, device=0, input_shape=(720,1280)):
                 inputs= [
                     torch_tensorrt.Input((N, C, H, W)),
                 ],
-                enabled_precisions= { torch_tensorrt.dtype.half } # Run with FP16
+                enabled_precisions= { torch_tensorrt.dtype.half },
+                min_block_size = 1,
             )
             model = trt_model
             torch.jit.save(model, ts_path)
@@ -83,9 +84,9 @@ class JitWrapper(nn.Module):
 
 if __name__ == '__main__':
     import torch, time, tqdm
-
-    model = build_model(input_shape=(900,1600))
-    batch = torch.zeros((3,1,720,1280), dtype=torch.float32, device=0)
+    input_shape = (720,1280)
+    model = build_model(input_shape=input_shape)
+    batch = torch.zeros((3,1,*input_shape), dtype=torch.float32, device=0)
     
     def run(n=100):
         t = time.time()
