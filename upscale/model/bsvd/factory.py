@@ -151,7 +151,7 @@ if __name__ == '__main__':
     print((time.time()-t)/N)
 
     denoise = (torch.clamp(output[0,output.shape[1]//2,:,:,:],0,1).permute(1,2,0)*255).cpu().numpy().astype(np.uint8)
-    print(output, denoise, denoise.shape, np.max(denoise.reshape(input_shape[0]*input_shape[1],3), axis=0))
+    #print(output, denoise, denoise.shape, np.max(denoise.reshape(input_shape[0]*input_shape[1],3), axis=0))
     #plt.imshow(denoise)
     denoise = cv2.cvtColor(denoise, cv2.COLOR_RGB2BGR)
     cv2.imwrite('output.png', denoise)

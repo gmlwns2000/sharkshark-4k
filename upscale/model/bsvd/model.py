@@ -1,4 +1,3 @@
-#%%
 from typing import List, Optional
 import torch
 import torch.nn as nn
@@ -136,12 +135,12 @@ class BiBufferConv(nn.Module):
         self.fold_div = 8
         self.fold = self.c // self.fold_div
         #self.left_fold_2fold_init = False
-        self.left_fold_2fold_init = [0]
-        #self.register_buffer('left_fold_2fold_init', torch.zeros((1,), dtype=torch.int32), False)
+        #self.left_fold_2fold_init = [0]
+        self.register_buffer('left_fold_2fold_init', torch.zeros((1,), dtype=torch.int32), False)
         self.register_buffer('left_fold_2fold', torch.zeros((self.n, self.fold, self.h, self.w), dtype=torch.float32), False)
         #self.center_init = False
-        self.center_init = [0]
-        #self.register_buffer('center_init', torch.zeros((1,), dtype=torch.int32), False)
+        #self.center_init = [0]
+        self.register_buffer('center_init', torch.zeros((1,), dtype=torch.int32), False)
         self.register_buffer('center', torch.zeros((self.n, self.c, self.h, self.w), dtype=torch.float32), False)
         
         #self.register_buffer('fold_zeros', torch.zeros((self.n, self.fold, self.h, self.w), dtype=torch.float32), False)
@@ -152,7 +151,7 @@ class BiBufferConv(nn.Module):
         self.left_fold_2fold_init[0] = 0
         self.center_init[0] = 0
         
-    def forward(self, input_right: Optional[torch.Tensor], verbose=False):
+    def forward(self, input_right: Optional[torch.Tensor]):
         # if input_right is not None:
         #     self.n, self.c, self.h, self.w = input_right.size()
         #     self.fold = self.c//self.fold_div
@@ -167,12 +166,13 @@ class BiBufferConv(nn.Module):
             if input_right is not None:
                 if self.left_fold_2fold_init[0] == 0:
                     # In the start stage, the memory and left tensor is empty
+                    
                     #self.left_fold_2fold.zero_() #= torch.zeros((self.n, self.fold, self.h, self.w), device=torch.device('cuda'))
-                    self.left_fold_2fold = (input_right[:,:self.fold,:,:] * 0).clone()
-                    #self.left_fold_2fold *= 0
+                    #self.left_fold_2fold = (input_right[:,:self.fold,:,:] * 0).clone()
+                    torch.mul(self.left_fold_2fold, 0, out=self.left_fold_2fold)
                     self.left_fold_2fold_init[0] = 1
-                #self.center.copy_(input_right)# = input_right
-                self.center = input_right
+                self.center.copy_(input_right)# = input_right
+                #self.center = input_right
                 self.center_init[0] = 1
             else:
                 # in the end stage, both feed in and memory are empty
@@ -188,11 +188,11 @@ class BiBufferConv(nn.Module):
         else:
             output =  self.op(self.left_fold_2fold, self.center, input_right)
         
-        self.left_fold_2fold = self.center[:, self.fold:2*self.fold, :, :]
-        #self.left_fold_2fold.copy_(slice(self.center, self.fold))
+        #self.left_fold_2fold = self.center[:, self.fold:2*self.fold, :, :]
+        self.left_fold_2fold.copy_(slice(self.center, self.fold))
         if input_right is not None:
-            self.center = input_right
-            #self.center.copy_(input_right) # = input_right
+            #self.center = input_right
+            self.center.copy_(input_right) # = input_right
             self.center_init[0] = 1
         else:
             self.center_init[0] = 0 # = None #torch.zeros((1,1,1,1), device=torch.device('cuda'))
@@ -419,24 +419,24 @@ class MemSkip(nn.Module):
         global mem_idx, mem_shapes, bsvd_input_res
 
         super(MemSkip, self).__init__()
-        self.mem_list = []
+        #self.mem_list = []
 
         self.idx = mem_idx
         mem_idx += 1
         #self.last_shape = None
         self.expected_shape = mem_shapes[bsvd_input_res][self.idx]
 
-        self.buffer_size = [4]
-        #self.register_buffer('buffer_size', torch.empty((1,), dtype=torch.int32).fill_(4), False)
+        #self.buffer_size = [4]
+        self.register_buffer('buffer_size', torch.empty((1,), dtype=torch.int32).fill_(4), False)
         
-        self.count = [0]
-        #self.register_buffer('count', torch.zeros((1,), dtype=torch.int32), False)
+        #self.count = [0]
+        self.register_buffer('count', torch.zeros((1,), dtype=torch.int32), False)
 
-        self.tail_idx = [0]
-        #self.register_buffer('tail_idx', torch.zeros((1,), dtype=torch.int32), False)
+        #self.tail_idx = [0]
+        self.register_buffer('tail_idx', torch.zeros((1,), dtype=torch.int32), False)
         
-        self.head_idx = [0]
-        #self.register_buffer('head_idx', torch.zeros((1,), dtype=torch.int32), False)
+        #self.head_idx = [0]
+        self.register_buffer('head_idx', torch.zeros((1,), dtype=torch.int32), False)
         
         self.register_buffer('buffer', torch.empty((self.buffer_size[0], *self.expected_shape)), False)
     
@@ -447,8 +447,8 @@ class MemSkip(nn.Module):
             #     assert self.last_shape == x.shape
             # self.last_shape = x.shape
 
-            self.mem_list.insert(0,x)
-            return 1
+            #self.mem_list.insert(0,x)
+            #return 1
 
             hey = self.tail_idx[0]
             self.buffer[hey, :, :, :, :] = x
@@ -463,7 +463,7 @@ class MemSkip(nn.Module):
     
     def pop(self, x: Optional[torch.Tensor]):
         if x is not None:
-            return self.mem_list.pop()
+            #return self.mem_list.pop()
 
             item = self.buffer[self.head_idx[0]].clone()
             
@@ -718,3 +718,33 @@ class BSVD(nn.Module):
             if "BiBufferConv" in str(type(module)):
                 count+=1
         return count
+
+if __name__ == '__main__':
+    model = BiBufferConv(
+        in_channels=128, out_channels=128, kernel_size=3, stride=1, padding=1, bias=True
+    )
+    inp = torch.zeros((1,128,360,640))
+
+    model = model.to(0).eval()
+    inp = inp.to(0)
+    for i in range(10):
+        with torch.no_grad():
+            inp = torch.rand((1,128,360,640)).to(0)
+            output = model(inp)
+            print(output if output is None else output.shape, (inp-output).mean() if output is not None else None)
+
+    import torch_tensorrt, os
+    torch_tensorrt.logging.set_reportable_log_level(torch_tensorrt.logging.Level.Debug)
+    
+    print('Bsvd.build_model: Compiling...')
+    traced_model = torch.jit.script(model, (inp))
+    trt_model = torch_tensorrt.compile(traced_model, 
+        inputs= [
+            torch_tensorrt.Input(inp.shape),
+        ],
+        enabled_precisions= { torch_tensorrt.dtype.half },
+        require_full_compilation = False
+    )
+    model = trt_model
+
+    torch_tensorrt.logging.set_reportable_log_level(torch_tensorrt.logging.Level.Warning)
