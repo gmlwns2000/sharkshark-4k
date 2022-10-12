@@ -118,7 +118,7 @@ class TwitchStreamer(BaseService):
             videostream.send_audio(seg[:,0], seg[:,1])
 
             frame = frames_to_send[i]
-            frame = cv2.putText(frame, f"{self.frame_count}", (10, 40), cv2.FONT_HERSHEY_PLAIN, 2.0, (0,255,0), 2)
+            frame = cv2.putText(frame, f"Processed: {self.frame_count} frames", (10, 40), cv2.FONT_HERSHEY_PLAIN, 2.0, (0,255,0), 2)
             self.frame_count += 1
             frame = frame.astype(np.float32) / 255.0
             videostream.send_video_frame(frame)

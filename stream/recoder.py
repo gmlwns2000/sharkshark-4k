@@ -90,7 +90,7 @@ class TwitchRecoder:
                 if frame is None: raise Exception('frame recodered None!')
                 if self.output_shape is not None:
                     frame = cv2.resize(frame, dsize=[self.output_shape[1], self.output_shape[0]], interpolation=cv2.INTER_AREA)
-                    frame = cv2.putText(frame, f"{self.frame_count}", (10, 64), cv2.FONT_HERSHEY_PLAIN, 1, (255,0,0), 1)
+                    frame = cv2.putText(frame, f"Received: {self.frame_count} frames", (10, 64), cv2.FONT_HERSHEY_PLAIN, 1, (255,0,0), 1)
                     self.frame_count += 1
                 frames.append(frame)
             if len(frames) == 0:

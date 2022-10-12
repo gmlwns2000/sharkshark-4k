@@ -42,7 +42,15 @@ class TwitchUpscalerPostStreamer:
         self.frame_skips = frame_skips
     
     def recoder_on_queue(self, entry:RecoderEntry):
-        small_batch_size = 4
+        batch_size = len(entry.frames)
+        if batch_size < 16:
+            small_batch_size = 4
+        elif batch_size < 32:
+            small_batch_size = 8
+        elif batch_size < 64:
+            small_batch_size = 8
+        else:
+            small_batch_size = 8
         for i in range(len(entry.frames)//small_batch_size):
             try:
                 entry.profiler.start('recoder.output.entry')
@@ -132,7 +140,7 @@ if __name__ == '__main__':
     # )
 
     pipeline = TwitchUpscalerPostStreamer(
-        url = TW_ZURURU, fps = 8, denoising=True, lr_level=3, quality='720p60', frame_skips=True, denoise_rate=1.0
+        url = 'https://www.twitch.tv/dancingshana', fps = 8, denoising=True, lr_level=3, quality='720p60', frame_skips=True, denoise_rate=1.0
     )
 
     # pipeline = TwitchUpscalerPostStreamer(
