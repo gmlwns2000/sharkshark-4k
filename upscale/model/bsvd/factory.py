@@ -17,7 +17,7 @@ class JitWrapper(nn.Module):
             args = [a.half() for a in args]
         return self.module(*args)
 
-def build_model(device=0, input_shape=(360, 640)):
+def __build_model(device=0, input_shape=(360, 640)):
     model = bsvd.BSVD(
         chns=[64,128,256], mid_ch=64, shift_input=False, 
         norm='none', interm_ch=64, act='relu6', 
@@ -113,6 +113,70 @@ def build_model(device=0, input_shape=(360, 640)):
     skip_repeat = True
     amp_enabled = False
     half_convert = False
+
+    return model
+
+def build_model(device=0, input_shape=(360, 640)):
+    import torch_tensorrt, os
+    import upscale.model.bsvd.model_volatile as bsvd_vol
+
+    torch_tensorrt.logging.set_reportable_log_level(torch_tensorrt.logging.Level.Warning)
+
+    H, W = input_shape
+    bsvd_vol.set_res((H, W))
+
+    model = bsvd_vol.BSVD(
+        chns=[64,128,256], mid_ch=64, shift_input=False, 
+        norm='none', interm_ch=64, act='relu6', 
+        pretrain_ckpt='./upscale/model/bsvd/bsvd-64.pth'
+    )
+    model = model.to(device).eval()
+
+    def jit(model, inp_shape=input_shape, save_path=None):
+        if os.path.exists(save_path):
+            return torch.jit.load(save_path)
+        else:
+            trt_model = torch_tensorrt.compile(model, 
+                inputs = [
+                    torch_tensorrt.Input(inp_shape, dtype=torch.half),
+                ],
+                enabled_precisions= { torch_tensorrt.dtype.half },
+                require_full_compilation = False,
+                min_block_size = 3,
+            )
+            if save_path is not None:
+                torch.jit.save(trt_model, save_path)
+            return trt_model
+    
+    def jit_bsvd(bsvd_model, image_shape=(720,1280)):
+        H, W = image_shape
+        F = 1
+        inp_shape = (1,F,4,H,W)
+
+        version = '0'
+        name = f'saves/models/bsvd_{version}_({F}x{H}x{W})'
+        
+        model = bsvd_model.half()
+        
+        model.temp1.inc = jit(model.temp1.inc, inp_shape=(1,4,H,W), save_path=name+'_t1inc.pth')
+        model.temp1.downc0 = jit(model.temp1.downc0, inp_shape=(1,64,H,W), save_path=name+'_t1d0.pth')
+        model.temp1.downc1 = jit(model.temp1.downc1, inp_shape=(1,128,H//2,W//2), save_path=name+'_t1d1.pth')
+        model.temp1.upc2 = jit(model.temp1.upc2, inp_shape=(1,256,H//4,W//4), save_path=name+'_t1u2.pth')
+        model.temp1.upc1 = jit(model.temp1.upc1, inp_shape=(1,128,H//2,W//2), save_path=name+'_t1u1.pth')
+        model.temp1.outc = jit(model.temp1.outc, inp_shape=(1,64,H,W), save_path=name+'_t1out.pth')
+
+        model.temp2.inc = jit(model.temp2.inc, inp_shape=(1,64,H,W), save_path=name+'_t2inc.pth')
+        model.temp2.downc0 = jit(model.temp2.downc0, inp_shape=(1,64,H,W), save_path=name+'_t2d0.pth')
+        model.temp2.downc1 = jit(model.temp2.downc1, inp_shape=(1,128,H//2,W//2), save_path=name+'_t2d1.pth')
+        model.temp2.upc2 = jit(model.temp2.upc2, inp_shape=(1,256,H//4,W//4), save_path=name+'_t2u2.pth')
+        model.temp2.upc1 = jit(model.temp2.upc1, inp_shape=(1,128,H//2,W//2), save_path=name+'_t2u1.pth')
+        model.temp2.outc = jit(model.temp2.outc, inp_shape=(1,64,H,W), save_path=name+'_t2out.pth')
+
+        return model
+    
+    model = JitWrapper(jit_bsvd(model, (H, W)), True)
+
+    torch_tensorrt.logging.set_reportable_log_level(torch_tensorrt.logging.Level.Warning)
 
     return model
 

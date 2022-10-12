@@ -14,7 +14,7 @@ from .upscaler_base import BaseUpscalerService, UpscalerQueueEntry
 def log(*args, **kwargs):
     print(f"FsrcnnUpscalerService: {' '.join([str(a) for a in args])}", **kwargs)
 
-def blur_ker(channels=1, kernel_size = 3, sigma = 1):
+def blur_ker(channels=1, kernel_size = 3, sigma = 0.5):
     # Set these to whatever you want for your gaussian filter
 
     # Create a x, y coordinate grid of shape (kernel_size, kernel_size, 2)
@@ -112,11 +112,11 @@ class FsrcnnUpscalerService(BaseUpscalerService):
         ).eval()
         if self.denoising:
             self.denoise_model = build_denoise_model(
-                device=self.device
+                device=self.device, input_shape=self.lr_shape
             )
             self.denoise_blur = blur_ker().half().to(self.device)
-            self.denoise_sharpen = sharpen_ker(strength=0.01).half().to(self.device)
-            self.denoise_sharpen_hr = sharpen_ker(strength=0.05).half().to(self.device)
+            self.denoise_sharpen = sharpen_ker(strength=0.02).half().to(self.device)
+            self.denoise_sharpen_hr = sharpen_ker(strength=0.07).half().to(self.device)
         log('model loaded')
     
     def proc_cleanup(self):

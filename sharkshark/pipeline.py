@@ -100,6 +100,8 @@ class TwitchUpscalerPostStreamer:
         print(f'TwitchUpscalerPostStreamer: streamed, idx: {entry.step}, took: {(time.time()-self.last_streamed)*1000:.1f}ms, frames[{len(entry.frames)},{entry.frames[0].shape}]')
         entry.profiler.set('upscaler.upscale.peritemms', (entry.profiler.data['upscaler.upscale'] / len(entry.frames))*1000)
         if (time.time()-self.last_reported) > 3.0:
+            entry.profiler.set('upscaler.inputq', self.upscaler.job_queue.qsize())
+            entry.profiler.set('streamer.inputq', self.streamer.job_queue.qsize())
             print(json.dumps(entry.profiler.data, indent=2))
             self.last_reported = time.time()
         self.last_streamed = time.time()
@@ -132,7 +134,7 @@ if __name__ == '__main__':
     # )
 
     pipeline = TwitchUpscalerPostStreamer(
-        url = TW_ZURURU, fps = 8, denoising=True, lr_level=3, quality='720p60', frame_skips=True, denoise_rate=1.0
+        url = 'https://www.twitch.tv/gosegugosegu', fps = 12, denoising=True, lr_level=3, quality='720p60', frame_skips=True, denoise_rate=2.0
     )
 
     # pipeline = TwitchUpscalerPostStreamer(
