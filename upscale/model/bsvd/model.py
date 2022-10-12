@@ -5,6 +5,13 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 
+
+bsvd_input_res = (720, 1280)
+
+def set_res(v):
+    global bsvd_input_res
+    bsvd_input_res = v
+
 def extract_dict(ckpt_state, string_name='base_model.temp1.', replace_name=''):
     m_dict = {}
     for k, v in ckpt_state.items():
@@ -56,8 +63,49 @@ def slice(x: Optional[torch.Tensor], fold:int):
     assert x is not None
     return x[:, fold:2*fold, :, :]
 
+biconv_idx = 0
+biconv_expected = {
+    (720, 1280): [
+        (1, 128, 360, 640),
+        (1, 128, 360, 640),
+        (1, 256, 180, 320),
+        (1, 256, 180, 320),
+        (1, 256, 180, 320),
+        (1, 256, 180, 320),
+        (1, 128, 360, 640),
+        (1, 128, 360, 640),
+        (1, 128, 360, 640),
+        (1, 128, 360, 640),
+        (1, 256, 180, 320),
+        (1, 256, 180, 320),
+        (1, 256, 180, 320),
+        (1, 256, 180, 320),
+        (1, 128, 360, 640),
+        (1, 128, 360, 640),
+    ],
+    (360, 640): [
+        (1, 128, 180, 320),
+        (1, 128, 180, 320),
+        (1, 256, 90, 160),
+        (1, 256, 90, 160),
+        (1, 256, 90, 160),
+        (1, 256, 90, 160),
+        (1, 128, 180, 320),
+        (1, 128, 180, 320),
+        (1, 128, 180, 320),
+        (1, 128, 180, 320),
+        (1, 256, 90, 160),
+        (1, 256, 90, 160),
+        (1, 256, 90, 160),
+        (1, 256, 90, 160),
+        (1, 128, 180, 320),
+        (1, 128, 180, 320),
+    ],
+}
+
+
 class BiBufferConv(nn.Module):
-    left_fold_2fold: torch.Tensor
+    left_fold_2fold: Optional[torch.Tensor]
     center: Optional[torch.Tensor]
 
     def __init__(self,
@@ -84,57 +132,56 @@ class BiBufferConv(nn.Module):
 
         self.n, self.c, self.h, self.w = 0,0,0,0
         self.fold = 0
-        self.left_fold_2fold = torch.zeros((1,1,1,1), device=torch.device('cuda'))
+        self.left_fold_2fold_init = False
+        self.left_fold_2fold = None
+        self.center_init = False
         self.center = None
-        
+    
     def reset(self):
-        self.left_fold_2fold = torch.zeros((1,1,1,1), device=torch.device('cuda'))
+        self.left_fold_2fold_init = False
+        self.left_fold_2fold = None
+        self.center_init = False
         self.center = None
-        
-    def forward(self, input_right: Optional[torch.Tensor], verbose=False):
+    
+    #@torch.jit.ignore
+    def forward(self, input_right: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
         fold_div = 8
         if input_right is not None:
             self.n, self.c, self.h, self.w = input_right.size()
             self.fold = self.c//fold_div
         # Case1: In the start or end stage, the memory is empty
         
-        if self.center is None:
-            # if verbose:
-            
+        if not self.center_init:
             if input_right is not None:
-                if self.left_fold_2fold is None or self.left_fold_2fold.shape[-1] == 1:
+                if not self.left_fold_2fold_init:
                     # In the start stage, the memory and left tensor is empty
 
                     self.left_fold_2fold = torch.zeros((self.n, self.fold, self.h, self.w), device=torch.device('cuda'))
-                #if verbose: print("%f+none+%f = none"%(torch.mean(self.left_fold_2fold), torch.mean(input_right)))
+                    self.left_fold_2fold_init = True
 
                 self.center = input_right
+                self.center_init = True
             else:
                 # in the end stage, both feed in and memory are empty
-                #if verbose: print("%f+none+none = none"%(torch.mean(self.left_fold_2fold)))
-                # print("self.center is None")
-
-                self.center = None#torch.zeros((1,1,1,1), device=torch.device('cuda'))
+                #self.center = None
+                self.center_init = False
             return None
         # Case2: Center is not None, but input_right is None
         elif input_right is None:
-            assert self.center is not None
+            assert self.center_init
             # In the last procesing stage, center is 0
             output =  self.op(self.left_fold_2fold, self.center, torch.zeros((self.n, self.fold, self.h, self.w), device=torch.device('cuda')))
-            #if verbose: print("%f+%f+none = %f"%(torch.mean(self.left_fold_2fold), torch.mean(self.center), torch.mean(output)))
         else:
-            
             output =  self.op(self.left_fold_2fold, self.center, input_right)
-            #if verbose: print("%f+%f+%f = %f"%(torch.mean(self.left_fold_2fold), torch.mean(self.center), torch.mean(input_right), torch.mean(output)))
-            # if output == 57:
-                # a = 1
         
         #self.left_fold_2fold = self.center[:, self.fold:2*self.fold, :, :]
         self.left_fold_2fold = slice(self.center, self.fold)
+        self.left_fold_2fold_init = True
         if input_right is not None:
             self.center = input_right
+            self.center_init = True
         else:
-            self.center = None#torch.zeros((1,1,1,1), device=torch.device('cuda'))
+            self.center_init = False
         return output
 
 class MemCvBlock(nn.Module):
@@ -152,8 +199,7 @@ class MemCvBlock(nn.Module):
                             padding=1,bias=bias)
         self.b2 = norm_fn(out_ch)
         self.relu2 = act_fn(inplace=True)
-
-
+    
     def forward(self, x:Optional[torch.Tensor]):
         x = self.c1(x)
         if x is not None:
@@ -164,6 +210,7 @@ class MemCvBlock(nn.Module):
             x = self.b2(x)
             x = self.relu2(x)
         return x
+    
     def load(self, state_dict):
         state_dict = replace_dict(state_dict, 'net.', 'op.conv.')
         self.load_state_dict(state_dict)
@@ -328,24 +375,87 @@ class OutputCvBlock(nn.Module):
             return self.convblock(x)
     def load(self, state_dict):
         self.load_state_dict(state_dict)
-        
+
+
+mem_idx = 0
+mem_shapes = {
+    (360, 640) : [
+        (1, 3, 360, 640),
+        (1, 64, 360, 640),
+        (1, 128, 180, 320),
+        (1, 3, 360, 640),
+        (1, 64, 360, 640),
+        (1, 128, 180, 320),
+    ],
+    (720, 1280) : [
+        (1, 3, 720, 1280),
+        (1, 64, 720, 1280),
+        (1, 128, 360, 640),
+        (1, 3, 720, 1280),
+        (1, 64, 720, 1280),
+        (1, 128, 360, 640),
+    ]
+}
+
 class MemSkip(nn.Module):
     mem_list: List[torch.Tensor]
-
+    
     def __init__(self):
+        global mem_idx, mem_shapes, bsvd_input_res
+
         super(MemSkip, self).__init__()
         self.mem_list = []
-    
+
+        self.idx = mem_idx
+        mem_idx += 1
+        #self.last_shape = None
+        self.expected_shape = mem_shapes[bsvd_input_res][self.idx]
+
+        #self.buffer_size = [4]
+        self.register_buffer('buffer_size', torch.empty((1,), dtype=torch.int32).fill_(4), False)
+        
+        #self.count = [0]
+        self.register_buffer('count', torch.zeros((1,), dtype=torch.int32), False)
+
+        #self.tail_idx = [0]
+        self.register_buffer('tail_idx', torch.zeros((1,), dtype=torch.int32), False)
+        
+        #self.head_idx = [0]
+        self.register_buffer('head_idx', torch.zeros((1,), dtype=torch.int32), False)
+        
+        self.register_buffer('buffer', torch.empty((self.buffer_size[0], *self.expected_shape)), False)
+        
     def push(self, x: Optional[torch.Tensor]):
         if x is not None:
+            #print(self.idx, x.shape, len(self.mem_list))
+            # if self.last_shape is not None:
+            #     assert self.last_shape == x.shape
+            # self.last_shape = x.shape
+
             self.mem_list.insert(0,x)
+            return 1
+            
+            self.buffer[self.tail_idx[0], :, :, :, :] = x
+            self.tail_idx[0] = (self.tail_idx[0] + 1) % self.buffer_size[0]
+            self.count[0] += 1
+
+            assert self.count[0] < self.buffer_size[0]
+
             return 1
         else:
             return 0
-    
+        
     def pop(self, x: Optional[torch.Tensor]):
         if x is not None:
             return self.mem_list.pop()
+
+            item = self.buffer[self.head_idx[0]].clone()
+            
+            self.head_idx[0] = (self.head_idx[0] + 1) % self.buffer_size[0]
+            self.count[0] -= 1
+            assert self.count[0] >= 0
+
+            return item
         else:
             return None
             
@@ -512,10 +622,10 @@ class BSVD(nn.Module):
         x   = self.temp2(x)
         return x
     
-    def forward(self, input, noise_map=None):
+    def forward(self, input):
         # N, F, C, H, W -> (N*F, C, H, W)
-        if noise_map is not None:
-            input = torch.cat([input, noise_map], dim=2)
+        # if noise_map is not None:
+        #     input = torch.cat([input, noise_map], dim=2)
         N, F, C, H, W = input.shape
         input = input.reshape(N*F, C, H, W)
         base_out = self.streaming_forward(input)
@@ -542,7 +652,8 @@ class BSVD(nn.Module):
         with torch.no_grad():
             for i, x in enumerate(input_seq):
                 # print("feed in %d image"%i)
-                x_cuda = x.cuda()
+                x_cuda = x.clone()#x.cuda()
+                #print(x_cuda.shape)
                 x_cuda = self.feedin_one_element(x_cuda)
                 # if x_cuda is not None: x_cuda = x_cuda.cpu()
                 if isinstance(x_cuda, torch.Tensor):

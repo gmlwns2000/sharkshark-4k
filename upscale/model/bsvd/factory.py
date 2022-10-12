@@ -3,7 +3,7 @@ import torch
 from torch import nn
 import time
 import numpy as np
-from upscale.model.bsvd.model import *
+import upscale.model.bsvd.model as bsvd
 from matplotlib import pyplot as plt
 
 class JitWrapper(nn.Module):
@@ -17,22 +17,24 @@ class JitWrapper(nn.Module):
             args = [a.half() for a in args]
         return self.module(*args)
 
-def build_model(device=0):
-    model = BSVD(
+def build_model(device=0, input_shape=(720,1280)):
+    model = bsvd.BSVD(
         chns=[64,128,256], mid_ch=64, shift_input=False, 
         norm='none', interm_ch=64, act='relu6', 
         pretrain_ckpt='./upscale/model/bsvd/bsvd-64.pth'
     )
     model = model.to(device).eval()
 
-    jit_mode = 'ds'
+    jit_mode = 'trt'
     if jit_mode == 'jit':
         model_ft = model
-        lr_curr = torch.empty((1, 1, 4, 540, 960), dtype=torch.float32, device=device)
-        traced_model = torch.jit.script(model_ft, (lr_curr))
+        lr_curr = torch.empty((1, 1, 4, *input_shape), dtype=torch.float32, device=device)
+        with torch.jit.optimized_execution(True):
+            traced_model = torch.jit.script(model_ft, (lr_curr))
         model = traced_model
-        f_s_m = torch._C._freeze_module(traced_model._c)
-        f_s_m.dump()
+        model = JitWrapper(model, True)
+        # f_s_m = torch._C._freeze_module(traced_model._c)
+        # f_s_m.dump()
     elif jit_mode == 'ds':
         import deepspeed
 
@@ -52,7 +54,7 @@ def build_model(device=0):
     elif jit_mode == 't2trt':
         from torch2trt import torch2trt
 
-        lr_curr = torch.empty((1, 1, 4, 540, 960), dtype=torch.float32, device=device)
+        lr_curr = torch.empty((1, 1, 4, *input_shape), dtype=torch.float32, device=device)
         model_trt = torch2trt(model, [lr_curr])
         model = model_trt
     elif jit_mode == 'trt':
@@ -60,7 +62,7 @@ def build_model(device=0):
         torch_tensorrt.logging.set_reportable_log_level(torch_tensorrt.logging.Level.Debug)
         version = '0'
 
-        lr_curr = torch.empty((1, 1, 4, 720, 1280), dtype=torch.float32, device=device)
+        lr_curr = torch.empty((1, 1, 4, *input_shape), dtype=torch.float32, device=device)
         N, F, C, H, W = lr_curr.shape
 
         ts_path = f"./saves/models/bsvd_{version}_{N}x{F}x{C}x{W}x{H}.pts"
@@ -69,11 +71,27 @@ def build_model(device=0):
             model = torch.jit.load(ts_path)
         else:
             print('Bsvd.build_model: Compiling...')
+            lr_curr = torch.empty((1, 1, 4, *input_shape), dtype=torch.float32, device=device)
+            with torch.jit.optimized_execution(True):
+                model = torch.jit.script(model, (lr_curr))
+            f_s_m = torch._C._freeze_module(model._c)
+            f_s_m.dump(True, True, False)
+
             trt_model = torch_tensorrt.compile(model, 
                 inputs= [
                     torch_tensorrt.Input(lr_curr.shape),
                 ],
-                enabled_precisions= { torch_tensorrt.dtype.half } # Run with FP16
+                enabled_precisions= { torch_tensorrt.dtype.half }, # Run with FP16
+                truncate_long_and_double = True,
+                require_full_compilation = False,
+                torch_executed_modules = [
+                    'upscale.model.bsvd.model.BiBufferConv', 
+                    'upscale.model.bsvd.model.MemSkip',
+                    '__torch__.upscale.model.bsvd.model.___torch_mangle_54.MemSkip',
+                    '__torch__.upscale.model.bsvd.model.___torch_mangle_35.BiBufferConv',
+                    '__torch__.upscale.model.bsvd.model.___torch_mangle_42.BiBufferConv',
+                ],
+                min_block_size = 1,
             )
             model = trt_model
             torch.jit.save(model, ts_path)
@@ -86,10 +104,13 @@ def build_model(device=0):
     return model
 
 if __name__ == '__main__':
-    cmodel = build_model()
+    input_shape = (720, 1280)
+    bsvd.set_res(input_shape)
+    
+    cmodel = build_model(input_shape = input_shape)
 
     frame = cv2.imread('./samples/images/shana.png')
-    frame = cv2.resize(frame, (640, 360))
+    frame = cv2.resize(frame, (input_shape[1], input_shape[0]))
     frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
     inp = torch.tensor(frame,device=0,dtype=torch.float32).permute(2,0,1).unsqueeze(0) / 255.0
 
@@ -102,20 +123,22 @@ if __name__ == '__main__':
     inp = inp.repeat(1, n_clips, 1, 1, 1)
     print(inp.shape)
 
-    for i in range(50):
+    N = 30
+    for i in range(N):
         with torch.no_grad(), torch.cuda.amp.autocast():
             output = cmodel(inp)
         if (i%10)==0: print('warm', i)
 
+    N = 100
     t = time.time()
-    for i in range(100):
+    for i in range(N):
         with torch.no_grad(), torch.cuda.amp.autocast():
             output = cmodel(inp)
         if (i%10)==0: print(i)
-    print(time.time()-t)
+    print((time.time()-t)/N)
 
     denoise = (torch.clamp(output[0,output.shape[1]//2,:,:,:],0,1).permute(1,2,0)*255).cpu().numpy().astype(np.uint8)
-    plt.imshow(denoise)
+    #plt.imshow(denoise)
     denoise = cv2.cvtColor(denoise, cv2.COLOR_RGB2BGR)
     cv2.imwrite('output.png', denoise)
 

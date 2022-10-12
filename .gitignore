@@ -4,3 +4,4 @@ saves/
 env_var.py
 ffmpeg/
 *.flv
+output.txt
