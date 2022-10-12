@@ -9,7 +9,16 @@ from stream.recoder import TW_DALTA, TW_RUMYONG, TW_SHYLILY, TW_ZURURU, TwitchRe
 from stream.streamer import TwitchStreamer, TwitchStreamerEntry
 
 class TwitchUpscalerPostStreamer:
-    def __init__(self, url, device=0, fps=12, denoising=True, denoise_rate=1.0, lr_level=3, hr_level=0, quality='720p60', frame_skips=True, output_file='rtmp://127.0.0.1/live') -> None:
+    def __init__(self, 
+        #streaming settings
+        url, fps=12, quality='720p60', frame_skips=True, output_file='rtmp://127.0.0.1/live',
+        #device settings
+        device=0, 
+        #upscaler settings
+        lr_level=3, hr_level=0, upscale_method='fsrcnn',
+        #denoiser settings
+        denoising=True, denoise_rate=1.0, 
+    ) -> None:
         self.url = url
         self.fps = fps
         self.device = device
@@ -18,25 +27,28 @@ class TwitchUpscalerPostStreamer:
             target_url=self.url, batch_sec=1, fps=self.fps, on_queue=self.recoder_on_queue,
             quality=quality
         )
-        #self.batch_size = self.fps
-        # self.upscaler = EgvsrUpscalerService(
-        #     device=self.device, lr_level=0, on_queue=self.upscaler_on_queue
-        # )
-        self.upscaler = FsrcnnUpscalerService(
-            device=self.device, lr_level=lr_level, on_queue=self.upscaler_on_queue, denoising=denoising, denoise_rate=denoise_rate
-        )
+        
+        if upscale_method == 'egvsr':
+            self.upscaler = EgvsrUpscalerService(
+                device=self.device, lr_level=lr_level, on_queue=self.upscaler_on_queue
+            )
+        elif upscale_method == 'fsrcnn':
+            self.upscaler = FsrcnnUpscalerService(
+                device=self.device, lr_level=lr_level, on_queue=self.upscaler_on_queue, denoising=denoising, denoise_rate=denoise_rate
+            )
+        else: raise Exception()
+
         self.recoder.output_shape = self.upscaler.lr_shape
-        #self.upscaler.output_shape = (2160, 3840)
-        #self.upscaler.output_shape = (1800, 3200)
         self.upscaler.output_shape = [
             (1440, 2560),
             (2160, 3840),
         ][hr_level]
-        #self.upscaler.output_shape = (1080, 1920)
+
         self.streamer = TwitchStreamer(
             on_queue=self.streamer_on_queue, fps=self.fps, resolution=self.upscaler.output_shape, 
             output_file=output_file #'output.flv'
         )
+        
         self.frame_step = 0
         self.last_reported = self.last_streamed = time.time()
         self.frame_skips = frame_skips
@@ -140,8 +152,12 @@ if __name__ == '__main__':
     # )
 
     pipeline = TwitchUpscalerPostStreamer(
-        url = 'https://www.twitch.tv/dancingshana', fps = 8, denoising=True, lr_level=3, quality='720p60', frame_skips=True, denoise_rate=1.0
+        url = TW_MARU, fps = 8, denoising=True, lr_level=3, quality='720p60', frame_skips=True, denoise_rate=1.0, upscale_method='fsrcnn'
     )
+
+    # pipeline = TwitchUpscalerPostStreamer(
+    #     url = TW_MARU, fps = 8, denoising=True, lr_level=2, quality='720p60', frame_skips=True, denoise_rate=1.0, upscale_method='egvsr'
+    # )
 
     # pipeline = TwitchUpscalerPostStreamer(
     #     url = 'https://www.twitch.tv/videos/1610992145', fps = 24, denoising=True, lr_level=4, hr_level=1, denoise_rate=2.0,

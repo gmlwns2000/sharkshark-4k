@@ -25,6 +25,8 @@ class UpscalerQueueEntry:
 
 class BaseUpscalerService(BaseService):
     profiler: Profiler
+    lr_shape = (720, 1280)
+    output_shape = (1440, 2560)
     on_queue = None
 
     def __init__(self) -> None:

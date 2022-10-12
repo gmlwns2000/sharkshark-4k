@@ -153,7 +153,6 @@ class EgvsrUpscalerService(BaseUpscalerService):
         self.hr_shape = tuple([i * self.scale for i in self.lr_shape])
         self.device = device
         self.on_queue = on_queue
-        self.output_shape = None
 
         super().__init__()
 
