@@ -154,9 +154,9 @@ class TwitchOutputStream(object):
             ])
         command.extend([
             # AUDIO CODEC PARAMETERS
-            '-acodec', 'libmp3lame', '-ar', '44100', '-b:a', '320k',
+            '-acodec', 'libmp3lame', '-ar', '44100', '-b:a', '256k',
             '-bufsize', '960k',
-            '-ac', '1',
+            #'-ac', '1',
             # '-acodec', 'aac', '-strict', 'experimental',
             # '-ab', '128k', '-ar', '44100', '-ac', '1',
             #'-async','132300',
