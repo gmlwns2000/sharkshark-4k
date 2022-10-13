@@ -184,6 +184,10 @@ class TwitchHLSStream(HLSStream):
         self.disable_ads = self.session.get_plugin_option("twitch", "disable-ads")
         self.low_latency = self.session.get_plugin_option("twitch", "low-latency")
 
+hls_proxy_method = 'kwabang'
+def set_hls_proxy_method(v):
+    global hls_proxy_method
+    hls_proxy_method = v
 
 class UsherService:
     def __init__(self, session):
@@ -206,6 +210,7 @@ class UsherService:
         return req.url
 
     def channel(self, channel, **extra_params):
+        global hls_proxy_method
         try:
             extra_params_debug = validate.Schema(
                 validate.get("token"),
@@ -221,7 +226,26 @@ class UsherService:
             log.debug(f"{extra_params_debug!r}")
         except PluginError:
             pass
-        return self._create_url(f"/api/channel/hls/{channel}.m3u8", **extra_params)
+        
+        if hls_proxy_method == 'kwabang':
+            print('Streamlink.Twitch: HLS proxy selected', hls_proxy_method)
+
+            url = f"https://api.twitch.tyo.kwabang.net/hls-raw/{channel}.m3u8"
+            params = {
+                "player": "twitchweb",
+                "p": int(random() * 999999),
+                "type": "any",
+                "allow_source": "true",
+                "allow_audio_only": "true",
+                "allow_spectre": "false",
+            }
+            params.update(extra_params)
+
+            req = self.session.http.prepare_new_request(url=url, params=params)
+
+            return req.url
+        else:
+            return self._create_url(f"/api/channel/hls/{channel}.m3u8", **extra_params)
 
     def video(self, video_id, **extra_params):
         return self._create_url(f"/vod/{video_id}", **extra_params)
@@ -615,7 +639,7 @@ class Twitch(Plugin):
         })
         sig, token, restricted_bitrates = self._access_token(True, self.channel)
         url = self.usher.channel(self.channel, sig=sig, token=token, fast_bread=True)
-
+        
         return self._get_hls_streams(url, restricted_bitrates)
 
     def _get_hls_streams_video(self):

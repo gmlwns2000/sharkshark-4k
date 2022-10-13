@@ -147,7 +147,7 @@ class TwitchRecoder:
 
 if __name__ == '__main__':
     print('asdf')
-    recoder = TwitchRecoder(target_url=TW_MAOU)
+    recoder = TwitchRecoder(target_url=TW_MAOU, quality='1080p60')
     recoder.start()
 
     time.sleep(3)
