@@ -147,7 +147,7 @@ class TwitchRecoder:
 
 if __name__ == '__main__':
     print('asdf')
-    recoder = TwitchRecoder(target_url=TW_SHYLILY)
+    recoder = TwitchRecoder(target_url=TW_MAOU)
     recoder.start()
 
     time.sleep(3)
