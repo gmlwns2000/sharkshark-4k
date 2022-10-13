@@ -97,6 +97,17 @@ biconv_expected = {
         (1, 128, 180, 320),
     ],
 }
+def add_res_expected(data, from_res, to_res):
+    d720 = data[from_res]
+    d1080 = []
+    for it in d720:
+        shape = list(it[:-2])
+        shape.append(int(it[-2]*(to_res[0]/from_res[0])))
+        shape.append(int(it[-1]*(to_res[0]/from_res[0])))
+        d1080.append(tuple(shape))
+    data[to_res] = d1080
+add_res_expected(biconv_expected, (720,1280), (1080,1920))
+add_res_expected(biconv_expected, (720,1280), (900,1600))
 
 class BiBufferConvVolatile(nn.Module):
     left_fold_2fold: torch.Tensor
@@ -360,6 +371,8 @@ mem_shapes = {
         (1, 128, 360, 640),
     ]
 }
+add_res_expected(mem_shapes, (720,1280), (1080,1920))
+add_res_expected(mem_shapes, (720,1280), (900,1600))
 
 class MemSkip(nn.Module):
     #mem_list: List[torch.Tensor]

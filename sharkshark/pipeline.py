@@ -122,6 +122,8 @@ class TwitchUpscalerPostStreamer:
         self.recoder.join()
 
 if __name__ == '__main__':
+    import streamlink.plugins.twitch as twstream
+    #twstream.set_hls_proxy_method('none')
     # pipeline = TwitchUpscalerPostStreamer(
     #     url = TW_DANCINGSANA, fps = 24, denoising=False, lr_level=3, quality='720p60'
     # )
@@ -134,7 +136,7 @@ if __name__ == '__main__':
     # )
 
     pipeline = TwitchUpscalerPostStreamer(
-        url = 'https://www.twitch.tv/gosegugosegu', fps = 12, denoising=True, lr_level=3, quality='720p60', frame_skips=True, denoise_rate=2.0
+        url = 'https://www.twitch.tv/anonymously042', fps = 8, denoising=True, lr_level=3, quality='1080p60', frame_skips=True, denoise_rate=1.0, hr_level=0,
     )
 
     # pipeline = TwitchUpscalerPostStreamer(

@@ -101,6 +101,18 @@ biconv_expected = {
         (1, 128, 180, 320),
     ],
 }
+def add_res_expected(data, from_res, to_res):
+    d720 = data[from_res]
+    d1080 = []
+    for it in d720:
+        shape = list(it[:-2])
+        shape.append(int(it[-2]*(to_res[0]/from_res[0])))
+        shape.append(int(it[-1]*(to_res[0]/from_res[0])))
+        d1080.append(tuple(shape))
+    data[to_res] = d1080
+add_res_expected(biconv_expected, (720,1280), (1080,1920))
+add_res_expected(biconv_expected, (720,1280), (900,1600))
+
 
 class BiBufferConv(nn.Module):
     left_fold_2fold: torch.Tensor
@@ -516,6 +528,8 @@ mem_shapes = {
         (1, 128, 360, 640),
     ]
 }
+add_res_expected(mem_shapes, (720,1280), (1080,1920))
+add_res_expected(mem_shapes, (720,1280), (900,1600))
 
 class MemSkip(nn.Module):
     #mem_list: List[torch.Tensor]
@@ -524,7 +538,7 @@ class MemSkip(nn.Module):
         global mem_idx, mem_shapes, bsvd_input_res
 
         super(MemSkip, self).__init__()
-        #self.mem_list = []
+        self.mem_list = []
 
         self.idx = mem_idx
         mem_idx += 1
@@ -552,8 +566,8 @@ class MemSkip(nn.Module):
             #     assert self.last_shape == x.shape
             # self.last_shape = x.shape
 
-            #self.mem_list.insert(0,x)
-            #return 1
+            self.mem_list.insert(0,x)
+            return 1
 
             hey = self.tail_idx[0]
             self.buffer[hey, :, :, :, :] = x
@@ -568,7 +582,7 @@ class MemSkip(nn.Module):
     
     def pop(self, x: Optional[torch.Tensor]):
         if x is not None:
-            #return self.mem_list.pop()
+            return self.mem_list.pop()
 
             item = self.buffer[self.head_idx[0]].clone()
             

@@ -120,19 +120,19 @@ class TwitchOutputStream(object):
                 '-f', 'lavfi',
                 '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100'
             ])
-        bitrate = '18000k'
+        bitrate = '24000k'
         command.extend([
             # VIDEO CODEC PARAMETERS
             '-vcodec', 'libx264',
             '-r', '%d' % self.fps,
             '-b:v', bitrate,
             '-s', '%dx%d' % (self.width, self.height),
-            '-preset', 'faster', #'-tune', 'zerolatency',
+            '-preset', 'medium', #'-tune', 'zerolatency',
             '-crf', '16',
             '-pix_fmt', 'yuv420p',
             # '-force_key_frames', r'expr:gte(t,n_forced*2)',
             '-minrate', bitrate, '-maxrate', bitrate,
-            '-bufsize', '54000k',
+            '-bufsize', '72000k',
             '-g', '2',     # key frame distance
             #'-keyint_min', '1',
             # '-filter:v "setpts=0.25*PTS"'

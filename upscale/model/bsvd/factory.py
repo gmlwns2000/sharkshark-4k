@@ -1,4 +1,5 @@
 import cv2
+from pkg_resources import working_set
 import torch
 from torch import nn
 import time
@@ -17,15 +18,18 @@ class JitWrapper(nn.Module):
             args = [a.half() for a in args]
         return self.module(*args)
 
-def __build_model(device=0, input_shape=(360, 640)):
+def build_model(device=0, input_shape=(360, 640), jit_mode='ds'):
+    if jit_mode == 'trt_vol':
+        return __build_model_volatile(device=device, input_shape=input_shape)
+    
+    bsvd.set_res(input_shape)
     model = bsvd.BSVD(
         chns=[64,128,256], mid_ch=64, shift_input=False, 
         norm='none', interm_ch=64, act='relu6', 
         pretrain_ckpt='./upscale/model/bsvd/bsvd-64.pth'
     )
     model = model.to(device).eval()
-
-    jit_mode = 'ds'
+    
     if jit_mode == 'jit':
         model_ft = model
         lr_curr = torch.empty((1, 1, 4, *input_shape), dtype=torch.float32, device=device)
@@ -47,43 +51,6 @@ def __build_model(device=0, input_shape=(360, 640)):
         )
         model = ds_engine.module
         model = JitWrapper(model, half_convert=True)
-        amp_enabled = False
-        half_convert = True
-    elif jit_mode == 't2trt':
-        from torch2trt import torch2trt
-        from torch2trt import tensorrt_converter
-        from torch2trt.torch2trt import add_missing_trt_tensors
-
-        @tensorrt_converter('torch.nn.PixelShuffle.forward')
-        def convert_PixelShuffle(ctx):
-
-            input = ctx.method_args[1]
-            module = ctx.method_args[0]
-            scale_factor =  module.upscale_factor
-
-            input_trt = add_missing_trt_tensors(ctx.network, [input])[0]
-            output = ctx.method_return
-
-            batch_size, in_channels, in_height, in_width = input.shape
-
-            assert scale_factor >= 1
-
-            out_channels = in_channels // (scale_factor * scale_factor)
-            out_height = in_height * scale_factor
-            out_width = in_width * scale_factor
-
-            layer_1 = ctx.network.add_shuffle(input_trt)
-            layer_1.reshape_dims = (out_channels, scale_factor, scale_factor, in_height, in_width)
-
-            layer_2 = ctx.network.add_shuffle(layer_1.get_output(0))
-            layer_2.first_transpose = (0, 3, 1, 4, 2)
-            layer_2.reshape_dims = (out_channels, out_height, out_width)
-
-            output._trt = layer_2.get_output(0)
-
-        lr_curr = torch.empty((1, 1, 4, *input_shape), dtype=torch.float32, device=device)
-        model_trt = torch2trt(model, [lr_curr], fp16_mode=True)
-        model = model_trt
     elif jit_mode == 'trt':
         import torch_tensorrt, os
         torch_tensorrt.logging.set_reportable_log_level(torch_tensorrt.logging.Level.Debug)
@@ -91,8 +58,6 @@ def __build_model(device=0, input_shape=(360, 640)):
 
         lr_curr = torch.empty((1, 1, 4, *input_shape), dtype=torch.float32, device=device)
         N, F, C, H, W = lr_curr.shape
-        # with torch.no_grad():
-        #     model(lr_curr)
 
         ts_path = f"./saves/models/bsvd_{version}_{N}x{F}x{C}x{W}x{H}.pts"
 
@@ -110,13 +75,9 @@ def __build_model(device=0, input_shape=(360, 640)):
             torch.jit.save(model, ts_path)
         torch_tensorrt.logging.set_reportable_log_level(torch_tensorrt.logging.Level.Warning)
 
-    skip_repeat = True
-    amp_enabled = False
-    half_convert = False
-
     return model
 
-def build_model(device=0, input_shape=(360, 640)):
+def __build_model_volatile(device=0, input_shape=(360, 640)):
     import torch_tensorrt, os
     import upscale.model.bsvd.model_volatile as bsvd_vol
 
@@ -143,6 +104,7 @@ def build_model(device=0, input_shape=(360, 640)):
                 enabled_precisions= { torch_tensorrt.dtype.half },
                 require_full_compilation = False,
                 min_block_size = 3,
+                workspace_size = 1<<30,
             )
             if save_path is not None:
                 torch.jit.save(trt_model, save_path)
@@ -181,7 +143,7 @@ def build_model(device=0, input_shape=(360, 640)):
     return model
 
 if __name__ == '__main__':
-    input_shape = (720, 1280)
+    input_shape = (1080, 1920)
     bsvd.set_res(input_shape)
 
     cmodel = build_model(input_shape=input_shape)

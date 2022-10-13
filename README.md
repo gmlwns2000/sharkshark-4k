@@ -18,7 +18,8 @@ RTX3090ti 두?장만 있다면 실시간으로 4k의 트위치 스트림을 볼 
 
 # Feature
 
-- Realtime 1440p8 upscale from 720p60 on any Twitch live stream!
+- Realtime 1440p12 upscale from 720p60 on any Twitch live stream!
+- Realtime 1440p12 upscale from 1080p60 on any Twitch live stream!
 
 Upscaler pipeline is designed for handling high noise 720p Twitch stream.
 Therefore, if you want to apply this upscaler to static image, you should reduce or disable denoiser
@@ -47,7 +48,6 @@ Therefore, if you want to apply this upscaler to static image, you should reduce
 - Faster upscaling model
 - Faster denoise model
 - MPEG noise specialized denoiser
-- HTTP proxy (Is it okay Twitch-kun?)
 
 # Contribution
 
