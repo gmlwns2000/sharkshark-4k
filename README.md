@@ -16,6 +16,8 @@ Written by AinL.
 
 RTX3090ti 두?장만 있다면 실시간으로 4k의 트위치 스트림을 볼 수 있답니다! 이제는 RTX4090 한장이면 충분하겠네요 (아마도)!
 
+**이거 하려고 RTX4090을 샀습니다!!!!!!!**
+
 # Feature
 
 - Realtime 1440p8 upscale from 720p60 on any Twitch live stream!
