@@ -29,12 +29,12 @@ class RecoderEntry:
     profiler: Profiler
 
 class TwitchRecoder:
-    def __init__(self, target_url=TW_MARU, batch_sec=1, fps=24, on_queue=None, quality='1080p'):
+    def __init__(self, target_url=TW_MARU, batch_sec=1, fps=24, on_queue=None, quality='1080p', buffer_size=1):
         assert isinstance(batch_sec, int)
         self.url = target_url
         self.batch_sec = batch_sec
         self.fps = fps
-        self.queue = mp.Queue(maxsize=1)
+        self.queue = mp.Queue(maxsize=buffer_size)
         self.cmd_queue = mp.Queue()
         self.on_queue = on_queue
         self.output_shape = None

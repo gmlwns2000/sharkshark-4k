@@ -115,8 +115,8 @@ class FsrcnnUpscalerService(BaseUpscalerService):
                 device=self.device, input_shape=self.lr_shape
             )
             self.denoise_blur = blur_ker().half().to(self.device)
-            self.denoise_sharpen = sharpen_ker(strength=0.02).half().to(self.device)
-            self.denoise_sharpen_hr = sharpen_ker(strength=0.07).half().to(self.device)
+            self.denoise_sharpen = sharpen_ker(strength=0.00002).half().to(self.device)
+            self.denoise_sharpen_hr = sharpen_ker(strength=0.00007).half().to(self.device)
         log('model loaded')
     
     def proc_cleanup(self):
@@ -163,7 +163,9 @@ class FsrcnnUpscalerService(BaseUpscalerService):
                 # lr_curr[0,0,1,:,:] = diff_map
                 # lr_curr[0,0,2,:,:] = diff_map
                 # lr_curr[0,0,3,:,:] = 0.0
-
+                
+                diff_map.fill_(0.1 * self.denoise_rate)
+                
                 lr_curr[0,0,3,:,:] = self.lr_prev_diff_map
                 lr_curr[0,0,:3,:,:] = self.lr_prev
                 lr_curr[0,1,3,:,:] = diff_map

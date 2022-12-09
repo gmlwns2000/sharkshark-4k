@@ -94,7 +94,7 @@ class TwitchStreamer(BaseService):
                 frame = frame.numpy().astype(np.uint8)
             if frame.shape != (*self.resolution, 3):
                 frame = cv2.resize(frame, dsize=(self.resolution[1], self.resolution[0]), interpolation=cv2.INTER_AREA)
-                print('err')
+                # print('err')
             frames_to_send.append(frame)
             #print('frame stat', np.min(frame), np.max(frame), frame.dtype, frame.shape)
             #videostream.send_video_frame(frame)
@@ -135,7 +135,7 @@ class TwitchStreamer(BaseService):
 if __name__ == '__main__':
     def on_queue(entry:TwitchStreamerEntry):
         print('Streamer: entry processed', entry.step)
-    streamer = TwitchStreamer(on_queue=on_queue, fps=24)
+    streamer = TwitchStreamer(on_queue=on_queue, fps=24, output_file='rtmp://127.0.0.1/live')
     streamer.start()
 
     from .recoder import TwitchRecoder, RecoderEntry, TW_MARU, TW_PIANOCAT
@@ -143,10 +143,11 @@ if __name__ == '__main__':
         streamer.push_job(TwitchStreamerEntry(
             frames=entry.frames,
             audio_segments=entry.audio_segment,
-            step=entry.index
+            step=entry.index,
+            profiler=entry.profiler
         ))
     
-    recoder = TwitchRecoder(target_url=TW_MARU, fps=24, on_queue=on_queue_recoder)
+    recoder = TwitchRecoder(target_url='https://www.twitch.tv/cotton__123', fps=24, quality='1080p60', on_queue=on_queue_recoder)
     recoder.start()
 
     recoder.join()

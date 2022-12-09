@@ -28,6 +28,8 @@ class _TwitchHandler():
             raise ValueError("No twitch_url specified")
         try:
             sess = Streamlink()
+            sess.set_plugin_option("twitch", "disable-ads", True)
+            sess.set_plugin_option("twitch", "low-latency", False)
             #sess.set_option('http-proxy', 'sock5h://72.210.221.197:4145')
             # sess.set_option('http-proxy', 'socks4://103.47.216.19:4145')
             # sess.set_option('https-proxy', 'socks4://103.47.216.19:4145')
@@ -40,6 +42,8 @@ class _TwitchHandler():
                 elif "audio" in stream_hls:
                     print("TwitchHandler: audio selected for audio stream")
                     self.quality = 'audio'
+                else:
+                    self.quality = '360p'
         except streamlink.exceptions.NoPluginError:
             raise ValueError(f"No stream availabe for {self.twitch_url}")
         if self.quality not in stream_hls:

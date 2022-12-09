@@ -22,11 +22,16 @@ def build_model(device=0, input_shape=(360, 640), jit_mode='ds'):
     if jit_mode == 'trt_vol':
         return __build_model_volatile(device=device, input_shape=input_shape)
     
-    bsvd.set_res(input_shape)
+    # bsvd.set_res(input_shape)
+    # model = bsvd.BSVD(
+    #     chns=[64,128,256], mid_ch=64, shift_input=False, 
+    #     norm='none', interm_ch=64, act='relu6', 
+    #     pretrain_ckpt='./upscale/model/bsvd/bsvd-64.pth'
+    # )
     model = bsvd.BSVD(
-        chns=[64,128,256], mid_ch=64, shift_input=False, 
-        norm='none', interm_ch=64, act='relu6', 
-        pretrain_ckpt='./upscale/model/bsvd/bsvd-64.pth'
+        chns=[32,64,128], mid_ch=32, shift_input=False, 
+        norm='none', interm_ch=30, act='relu6', 
+        pretrain_ckpt='./upscale/model/bsvd/bsvd-32.pth'
     )
     model = model.to(device).eval()
     
@@ -54,7 +59,7 @@ def build_model(device=0, input_shape=(360, 640), jit_mode='ds'):
     elif jit_mode == 'trt':
         import torch_tensorrt, os
         torch_tensorrt.logging.set_reportable_log_level(torch_tensorrt.logging.Level.Debug)
-        version = '0'
+        version = '1'
 
         lr_curr = torch.empty((1, 1, 4, *input_shape), dtype=torch.float32, device=device)
         N, F, C, H, W = lr_curr.shape
@@ -144,7 +149,7 @@ def __build_model_volatile(device=0, input_shape=(360, 640)):
 
 if __name__ == '__main__':
     input_shape = (1080, 1920)
-    bsvd.set_res(input_shape)
+    # bsvd.set_res(input_shape)
 
     cmodel = build_model(input_shape=input_shape)
 
