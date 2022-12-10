@@ -29,7 +29,7 @@ class RecoderEntry:
     profiler: Profiler
 
 class TwitchRecoder:
-    def __init__(self, target_url=TW_MARU, batch_sec=1, fps=24, on_queue=None, quality='1080p', buffer_size=1):
+    def __init__(self, target_url=TW_MARU, batch_sec=1, fps=24, on_queue=None, quality='1080p', buffer_size=1, audio_skip=0):
         assert isinstance(batch_sec, int)
         self.url = target_url
         self.batch_sec = batch_sec
@@ -40,6 +40,9 @@ class TwitchRecoder:
         self.output_shape = None
         self.frame_count = 0
         self.quality = quality
+        self.audio_skip = audio_skip
+        if(audio_skip > 0):
+            self.audio_queue = mp.Queue(maxsize=audio_skip)
     
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -83,6 +86,10 @@ class TwitchRecoder:
             
             #print('f')
             audio_segment = audio_grabber.grab()
+            if self.audio_skip > 0:
+                while self.audio_queue.qsize() < self.audio_skip:
+                    self.audio_queue.put(audio_segment.copy())
+                audio_segment = self.audio_queue.get()
             #print('ff')
             frames = []
             for i in range(self.batch_sec * self.fps):

@@ -20,6 +20,8 @@ class TwitchUpscalerPostStreamer:
         lr_level=3, hr_level=0, upscale_method='fsrcnn',
         #denoiser settings
         denoising=True, denoise_rate=1.0, 
+        #sync
+        audio_skip=0
     ) -> None:
         self.url = url
         self.fps = fps
@@ -28,7 +30,7 @@ class TwitchUpscalerPostStreamer:
 
         self.recoder = TwitchRecoder(
             target_url=self.url, batch_sec=1, fps=self.fps, on_queue=self.recoder_on_queue,
-            quality=quality
+            quality=quality, audio_skip=audio_skip,
         )
         #self.batch_size = self.fps
         # self.upscaler = EgvsrUpscalerService(
@@ -145,24 +147,13 @@ if __name__ == '__main__':
     import streamlink.plugins.twitch as twstream
     #twstream.set_hls_proxy_method('none')
     # pipeline = TwitchUpscalerPostStreamer(
-    #     url = TW_DANCINGSANA, fps = 24, denoising=False, lr_level=3, quality='720p60'
-    # )
-    # pipeline = TwitchUpscalerPostStreamer(
     #     url = 'https://www.twitch.tv/videos/1609788369', fps = 8, denoising=True, lr_level=3, quality='source', frame_skips=False
     # )
 
-    # pipeline = TwitchUpscalerPostStreamer(
-    #     url = TW_SHYLILY, fps = 30, denoising=False, lr_level=3, quality='720p48', frame_skips=True
-    # )
-
     pipeline = TwitchUpscalerPostStreamer(
-        url = 'https://www.twitch.tv/rkdwl12', fps = 20, denoising=False, lr_level=5, quality='1080p60', frame_skips=True, denoise_rate=1.0, hr_level=0,
-        output_file='rtmp://127.0.0.1:1935/live'
+        url = TW_VIICHAN, fps = 24, denoising=False, lr_level=3, quality='1080p60', frame_skips=True, denoise_rate=0.75, hr_level=0,
+        output_file='rtmp://127.0.0.1:1935/live', audio_skip=0,
     )
-
-    # pipeline = TwitchUpscalerPostStreamer(
-    #     url = TW_MARU, fps = 8, denoising=True, lr_level=2, quality='720p60', frame_skips=True, denoise_rate=1.0, upscale_method='egvsr'
-    # )
 
     # pipeline = TwitchUpscalerPostStreamer(
     #     url = 'https://www.twitch.tv/videos/1610992145', fps = 24, denoising=True, lr_level=4, hr_level=1, denoise_rate=2.0,

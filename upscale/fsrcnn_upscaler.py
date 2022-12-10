@@ -148,6 +148,7 @@ class FsrcnnUpscalerService(BaseUpscalerService):
                 hrs = torch.stack(hrs, dim=0).detach()
             else:
                 hrs = self.upscale_multi(frames)
+            torch.cuda.synchronize()
             return hrs
         else: 
             raise Exception(frames.shape)

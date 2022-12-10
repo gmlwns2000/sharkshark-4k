@@ -80,25 +80,36 @@ class TwitchStreamer(BaseService):
         job.profiler.start('streamer.frames.queue')
         frames_to_send = []
         if isinstance(job.frames, torch.Tensor):
+            assert job.frames.shape[-1] in [3,4]
+            
+            if job.frames.shape[1:] != (*self.resolution, 3):
+                print('missmatch', job.frames.shape, self.resolution)
+                if job.frames.shape[0] >= self.resolution[0]:
+                    job.frames = torch.nn.functional.interpolate(job.frames.permute(0, 3, 1, 2), self.resolution, mode='area').permute(0, 2, 3, 1)
+                else:
+                    job.frames = torch.nn.functional.interpolate(job.frames.permute(0, 3, 1, 2), self.resolution, mode='bicubic').permute(0, 2, 3, 1)
+            
             if job.frames.device != 'cpu':
+                if job.frames.dtype != torch.uint8:
+                    job.frames = job.frames.to(torch.uint8, non_blocking=True)
                 job.frames = job.frames.to('cpu', non_blocking=True)
+                job.frames = job.frames.numpy()
+                if(job.frames.dtype != np.uint8):
+                    job.frames = job.frames.astype(np.uint8)
+        
         for i in range(len(job.frames)):
             frame = job.frames[i]
-            if isinstance(frame, torch.Tensor):
-                # print(f"TwitchStreamer.proc: {frame.shape} {frame.device}")
-                if frame.shape != (*self.resolution, 3):
-                    print('missmatch', frame.shape, self.resolution)
-                    if frame.shape[0] >= self.resolution[0]:
-                        frame = torch.nn.functional.interpolate(frame, self.resolution, mode='area')
-                    else:
-                        frame = torch.nn.functional.interpolate(frame, self.resolution, mode='bicubic')
-                frame = frame.numpy().astype(np.uint8).copy()
+            # if isinstance(frame, torch.Tensor):
+            #     # print(f"TwitchStreamer.proc: {frame.shape} {frame.device}")
+            #     frame = frame.numpy()
+            #     if frame.dtype != np.uint8:
+            #         frame = frame.astype(np.uint8)
+            
             if frame.shape != (*self.resolution, 3):
-                frame = cv2.resize(frame, dsize=(self.resolution[1], self.resolution[0]), interpolation=cv2.INTER_AREA)
-                # print('err')
+                raise Exception('size mismatch', frame.shape, self.resolution)
+            
             frames_to_send.append(frame)
-            #print('frame stat', np.min(frame), np.max(frame), frame.dtype, frame.shape)
-            #videostream.send_video_frame(frame)
+        
         job.profiler.end('streamer.frames.queue')
         
         job.profiler.start('streamer.audio.queue')
@@ -116,13 +127,25 @@ class TwitchStreamer(BaseService):
         job.profiler.start('streamer.send.queue')
         for i in range(len(frames_to_send)):
             seg = audio_segs_to_send[i]
+            job.profiler.start('streamer.send.queue.audio')
             videostream.send_audio(seg[:,0], seg[:,1])
+            job.profiler.end('streamer.send.queue.audio')
 
-            frame = frames_to_send[i]
-            frame = cv2.putText(frame, f"Processed: {self.frame_count} frames", (10, 40), cv2.FONT_HERSHEY_PLAIN, 2.0, (0,255,0), 2)
+            frame = frames_to_send[i] #type: np.ndarray
+            job.profiler.start('streamer.send.queue.txt')
+            if isinstance(frame, np.ndarray):
+                if not frame.data.c_contiguous:
+                    frame = np.ascontiguousarray(frame)
+                frame = cv2.putText(frame, 
+                    f"[SHKSHK-AinL] Processed: {self.frame_count} frames {job.step * len(frames_to_send) - self.frame_count + i} "+\
+                    f"skipped ({(job.step * len(frames_to_send) - self.frame_count + i)/(self.frame_count+1e-8)*100:.1f}%)", 
+                    (10, 40), cv2.FONT_HERSHEY_PLAIN, 2.0, (0,255,0), 2
+                )
+            job.profiler.end('streamer.send.queue.txt')
+            job.profiler.start('streamer.send.queue.video')
             self.frame_count += 1
-            frame = frame.astype(np.float32) / 255.0
             videostream.send_video_frame(frame)
+            job.profiler.end('streamer.send.queue.video')
         job.profiler.end('streamer.send.queue')
 
         self.last_step = job.step

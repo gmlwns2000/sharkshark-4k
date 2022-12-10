@@ -7,9 +7,10 @@ This file contains the classes used to send videostreams to Twitch
 from __future__ import print_function, division
 import numpy as np
 import subprocess
-import signal
+import signal, io
 import threading
 import sys
+import torch
 try:
     import Queue as queue
 except ImportError:
@@ -124,7 +125,7 @@ class TwitchOutputStream(object):
             # size of one frame
             '-s', '%dx%d' % (self.width, self.height),
             '-pix_fmt', 'rgb24',  # The input are raw bytes
-            '-thread_queue_size', str(512),
+            '-thread_queue_size', str(4096),
             '-i', '-',  # The input comes from a pipe
 
             # Twitch needs to receive sound in their streams!
@@ -135,7 +136,7 @@ class TwitchOutputStream(object):
                 '-ar', '%d' % AUDIORATE,
                 '-ac', '2',
                 '-f', 's16le',
-                '-thread_queue_size', str(512),
+                '-thread_queue_size', str(4096),
                 '-i', '/tmp/audiopipe'
             ])
         else:
@@ -146,7 +147,8 @@ class TwitchOutputStream(object):
         bitrate = '24000k'
         command.extend([
             # VIDEO CODEC PARAMETERS
-            *(f'-b:v {bitrate} -minrate:v {bitrate} -maxrate:v {bitrate} -bufsize:v {bitrate} -c:v h264_nvenc -qp:v 19 -preset slow -profile:v high444p'.split()),
+            # -profile:v high444p
+            *(f'-bufsize:v 100M -c:v h264_nvenc -cq 23 -preset p7 -spatial-aq 1 -temporal-aq 1 -b_ref_mode 2 -bf 4 -rc-lookahead 20'.split()),
             # *(f'-vcodec libx264 -b:v {bitrate} -minrate:v {bitrate} -maxrate:v {bitrate} -bufsize:v {bitrate} -preset medium -crf 16 -pix_fmt yuv420p'.split()),
             '-r', '%d' % self.fps,
             '-s', '%dx%d' % (self.width, self.height),
@@ -181,7 +183,8 @@ class TwitchOutputStream(object):
             stdin=subprocess.PIPE,
             stderr=devnullpipe,
             stdout=devnullpipe,
-            env=my_env
+            env=my_env,
+            bufsize=1024*1024
         )
 
     def __enter__(self):
@@ -207,9 +210,20 @@ class TwitchOutputStream(object):
 
         assert frame.shape == (self.height, self.width, 3)
 
-        frame = np.clip(255*frame, 0, 255).astype('uint8')
+        if frame.dtype == np.uint8 or frame.dtype == torch.uint8:
+            pass
+        else:
+            frame = np.clip(255*frame, 0, 255).astype('uint8')
         try:
-            self.ffmpeg_process.stdin.write(frame.tostring())
+            if isinstance(frame, np.ndarray):
+                self.ffmpeg_process.stdin.write(frame.tobytes())
+            elif isinstance(frame, torch.Tensor):
+                # buff = io.BytesIO()
+                # torch.save(frame, buff)
+                # buff.seek(0)
+                # self.ffmpeg_process.stdin.write(buff.read())
+                self.ffmpeg_process.stdin.write(frame.numpy().tostring())
+            else: raise Exception('unknown frame type')
         except OSError:
             # The pipe has been closed. Reraise and handle it further
             # downstream
@@ -331,6 +345,7 @@ class TwitchOutputStreamRepeater(TwitchOutputStream):
         self.lastaudioframe_left = left_channel
         self.lastaudioframe_right = right_channel
 
+BUFFER_QSIZE = 64
 
 class TwitchBufferedOutputStream(TwitchOutputStream):
     """
@@ -346,7 +361,7 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
         self.last_frame_time = None
         self.next_video_send_time = None
         self.frame_counter = 0
-        self.q_video = queue.PriorityQueue(maxsize=120)
+        self.q_video = queue.PriorityQueue(maxsize=BUFFER_QSIZE)
 
         # don't call the functions directly, as they block on the first
         # call
@@ -362,7 +377,7 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
             self.last_audio_time = None
             self.next_audio_send_time = None
             self.audio_frame_counter = 0
-            self.q_audio = queue.PriorityQueue(maxsize=120)
+            self.q_audio = queue.PriorityQueue(maxsize=BUFFER_QSIZE)
             self.t = threading.Timer(0.0, self._send_audio)
             self.t.daemon = True
             self.t.start()
@@ -395,12 +410,13 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
             return
 
         # send the next frame at the appropriate time
+        FASTER_SLEEP = 1.0
         if self.next_video_send_time is None:
-            self.t = threading.Timer(1./self.fps, self._send_video_frame)
+            self.t = threading.Timer(1./self.fps * FASTER_SLEEP, self._send_video_frame)
             self.next_video_send_time = start_time + 1./self.fps
         else:
             self.next_video_send_time += 1./self.fps
-            next_event_time = self.next_video_send_time - start_time
+            next_event_time = (self.next_video_send_time - start_time) * FASTER_SLEEP
             if next_event_time > 0:
                 self.t = threading.Timer(next_event_time,
                                          self._send_video_frame)
@@ -448,15 +464,16 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
         else:
             downstream_time = len(left_audio) / AUDIORATE
 
+        FASTER_SLEEP = 1.0
         if self.next_audio_send_time is None:
-            self.t = threading.Timer(downstream_time,
+            self.t = threading.Timer(downstream_time*FASTER_SLEEP,
                                      self._send_audio)
             self.next_audio_send_time = start_time + downstream_time
         else:
             self.next_audio_send_time += downstream_time
             next_event_time = self.next_audio_send_time - start_time
             if next_event_time > 0:
-                self.t = threading.Timer(next_event_time,
+                self.t = threading.Timer(next_event_time*FASTER_SLEEP,
                                          self._send_audio)
             else:
                 # we should already have sent something!
