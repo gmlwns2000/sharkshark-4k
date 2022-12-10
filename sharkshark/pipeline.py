@@ -1,4 +1,6 @@
-import json
+import json, os
+os.environ['CUDA_MODULE_LOADING'] = 'lazy'
+import math
 import time, queue
 import torch
 import numpy as np
@@ -22,25 +24,24 @@ class TwitchUpscalerPostStreamer:
         self.url = url
         self.fps = fps
         self.device = device
+        self.small_batch_size = min(4, int(fps))
 
         self.recoder = TwitchRecoder(
             target_url=self.url, batch_sec=1, fps=self.fps, on_queue=self.recoder_on_queue,
             quality=quality
         )
-        
-        if upscale_method == 'egvsr':
-            self.upscaler = EgvsrUpscalerService(
-                device=self.device, lr_level=lr_level, on_queue=self.upscaler_on_queue
-            )
-        elif upscale_method == 'fsrcnn':
-            self.upscaler = FsrcnnUpscalerService(
-                device=self.device, lr_level=lr_level, on_queue=self.upscaler_on_queue, denoising=denoising, denoise_rate=denoise_rate
-            )
-        else: raise Exception()
-
+        #self.batch_size = self.fps
+        # self.upscaler = EgvsrUpscalerService(
+        #     device=self.device, lr_level=0, on_queue=self.upscaler_on_queue
+        # )
+        self.upscaler = FsrcnnUpscalerService(
+            device=self.device, lr_level=lr_level, on_queue=self.upscaler_on_queue, 
+            denoising=denoising, denoise_rate=denoise_rate, batch_size=self.small_batch_size
+        )
         self.recoder.output_shape = self.upscaler.lr_shape
         self.upscaler.output_shape = [
             (1440, 2560),
+            (1800, 3200),
             (2160, 3840),
         ][hr_level]
 
@@ -52,22 +53,20 @@ class TwitchUpscalerPostStreamer:
         self.frame_step = 0
         self.last_reported = self.last_streamed = time.time()
         self.frame_skips = frame_skips
-    
+        
     def recoder_on_queue(self, entry:RecoderEntry):
-        batch_size = len(entry.frames)
-        if batch_size < 16:
-            small_batch_size = 4
-        elif batch_size < 32:
-            small_batch_size = 8
-        elif batch_size < 64:
-            small_batch_size = 8
-        else:
-            small_batch_size = 8
-        for i in range(len(entry.frames)//small_batch_size):
+        small_batch_size = self.small_batch_size
+        for i in range(math.ceil(len(entry.frames)/small_batch_size)):
             try:
                 entry.profiler.start('recoder.output.entry')
-                frames = torch.tensor(entry.frames[i*small_batch_size:(i+1)*small_batch_size], dtype=torch.float32, requires_grad=False)
-                audio_segment = torch.tensor(entry.audio_segment[i*(len(entry.audio_segment)//(len(entry.frames)//small_batch_size)):(i+1)*(len(entry.audio_segment)//(len(entry.frames)//small_batch_size))], requires_grad=False)
+                frames = torch.tensor(entry.frames[i*small_batch_size:(i+1)*small_batch_size], dtype=torch.uint8, requires_grad=False)
+                assert small_batch_size != 0
+                assert (math.ceil(len(entry.frames)/small_batch_size)) != 0
+                audio_segment = torch.tensor(entry.audio_segment[
+                    i*(len(entry.audio_segment)//(math.ceil(len(entry.frames)/small_batch_size))):
+                    (i+1)*(len(entry.audio_segment)//(math.ceil(len(entry.frames)/small_batch_size)))
+                ], requires_grad=False)
+                frames = frames.to(self.device)
                 frames.share_memory_()
                 audio_segment.share_memory_()
                 entry.profiler.set('recoder.output.frames.shape', str(tuple(frames.shape)))
@@ -87,16 +86,16 @@ class TwitchUpscalerPostStreamer:
                 print("TwitchUpscalerPostStreamer: recoder output skipped")
 
     def upscaler_on_queue(self, entry:UpscalerQueueEntry):
-        print(
-            f'TwitchUpscalerPostStreamer: upscaled, '+\
-            f'tensor{entry.frames[0].shape}[{len(entry.frames)}], {entry.step}, '+\
-            f'elapsed: {entry.elapsed*1000:.1f}ms, onqueue'
-        )
+        # print(
+        #     f'TwitchUpscalerPostStreamer: upscaled, '+\
+        #     f'tensor{entry.frames[0].shape}[{len(entry.frames)}], {entry.step}, '+\
+        #     f'elapsed: {entry.elapsed*1000:.1f}ms, onqueue'
+        # )
         try:
             entry.profiler.start('upscaler.output.queue')
-            frames = entry.frames#.clone()
+            frames = entry.frames.detach().clone()#.to('cpu')
             #frames = (frames*255).to(torch.uint8)
-            audio_segments = entry.audio_segment#.clone()
+            audio_segments = entry.audio_segment.detach().clone()#.to('cpu')
             if not frames.is_shared():
                 frames.share_memory_()
             if not audio_segments.is_shared():
@@ -118,8 +117,10 @@ class TwitchUpscalerPostStreamer:
     
     def streamer_on_queue(self, entry:TwitchStreamerEntry):
         print(f'TwitchUpscalerPostStreamer: streamed, idx: {entry.step}, took: {(time.time()-self.last_streamed)*1000:.1f}ms, frames[{len(entry.frames)},{entry.frames[0].shape}]')
-        entry.profiler.set('upscaler.upscale.peritemms', (entry.profiler.data['upscaler.upscale'] / len(entry.frames))*1000)
+        entry.profiler.set('upscaler.upscale.per_frame_ms', (entry.profiler.data['upscaler.upscale'] / len(entry.frames))*1000)
         if (time.time()-self.last_reported) > 3.0:
+            entry.profiler.set('upscaler.inputq', self.upscaler.job_queue.qsize())
+            entry.profiler.set('streamer.inputq', self.streamer.job_queue.qsize())
             print(json.dumps(entry.profiler.data, indent=2))
             self.last_reported = time.time()
         self.last_streamed = time.time()
@@ -135,11 +136,14 @@ class TwitchUpscalerPostStreamer:
         self.streamer.stop()
 
     def join(self):
-        self.streamer.join()
+        code = self.streamer.join()
+        if code: raise Exception('streamer failed')
         self.upscaler.join()
         self.recoder.join()
 
 if __name__ == '__main__':
+    import streamlink.plugins.twitch as twstream
+    #twstream.set_hls_proxy_method('none')
     # pipeline = TwitchUpscalerPostStreamer(
     #     url = TW_DANCINGSANA, fps = 24, denoising=False, lr_level=3, quality='720p60'
     # )
@@ -152,7 +156,8 @@ if __name__ == '__main__':
     # )
 
     pipeline = TwitchUpscalerPostStreamer(
-        url = TW_MARU, fps = 8, denoising=True, lr_level=3, quality='720p60', frame_skips=True, denoise_rate=1.0, upscale_method='fsrcnn'
+        url = 'https://www.twitch.tv/rkdwl12', fps = 20, denoising=False, lr_level=5, quality='1080p60', frame_skips=True, denoise_rate=1.0, hr_level=0,
+        output_file='rtmp://127.0.0.1:1935/live'
     )
 
     # pipeline = TwitchUpscalerPostStreamer(

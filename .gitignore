@@ -5,3 +5,5 @@ env_var.py
 ffmpeg/
 *.flv
 *.mp4
+output.txt
+weights/

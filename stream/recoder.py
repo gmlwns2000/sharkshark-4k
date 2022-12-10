@@ -29,12 +29,12 @@ class RecoderEntry:
     profiler: Profiler
 
 class TwitchRecoder:
-    def __init__(self, target_url=TW_MARU, batch_sec=1, fps=24, on_queue=None, quality='1080p'):
+    def __init__(self, target_url=TW_MARU, batch_sec=1, fps=24, on_queue=None, quality='1080p', buffer_size=1):
         assert isinstance(batch_sec, int)
         self.url = target_url
         self.batch_sec = batch_sec
         self.fps = fps
-        self.queue = mp.Queue(maxsize=1)
+        self.queue = mp.Queue(maxsize=buffer_size)
         self.cmd_queue = mp.Queue()
         self.on_queue = on_queue
         self.output_shape = None
@@ -48,6 +48,14 @@ class TwitchRecoder:
         return state
 
     def proc(self):
+        print('TwitchRecoder: TwitchImageGrabber init')
+        image_grabber = TwitchImageGrabber(
+            twitch_url=self.url,
+            quality=self.quality,  # quality of the stream could be ["160p", "360p", "480p", "720p", "720p60", "1080p", "1080p60"]
+            blocking=True,
+            rate=self.fps  # frame per rate (fps)
+        )
+        
         # change to a stream that is actually online
         print('TwitchRecoder: TwitchAudioGrabber init')
         audio_grabber = TwitchAudioGrabber(
@@ -57,14 +65,6 @@ class TwitchRecoder:
             rate=44100,  # sampling rate of the audio
             channels=2,  # number of channels
             dtype=np.float32  # quality of the audio could be [np.int16, np.int32, np.float32, np.float64]
-        )
-
-        print('TwitchRecoder: TwitchImageGrabber init')
-        image_grabber = TwitchImageGrabber(
-            twitch_url=self.url,
-            quality=self.quality,  # quality of the stream could be ["160p", "360p", "480p", "720p", "720p60", "1080p", "1080p60"]
-            blocking=True,
-            rate=self.fps  # frame per rate (fps)
         )
 
         t = time.time()
@@ -147,7 +147,7 @@ class TwitchRecoder:
 
 if __name__ == '__main__':
     print('asdf')
-    recoder = TwitchRecoder(target_url=TW_SHYLILY)
+    recoder = TwitchRecoder(target_url=TW_MAOU, quality='1080p60')
     recoder.start()
 
     time.sleep(3)
