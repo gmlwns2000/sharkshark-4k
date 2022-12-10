@@ -75,7 +75,21 @@ class TwitchOutputStream(object):
                 print("> sudo apt-get update && "
                       "sudo apt-get install ffmpeg")
             sys.exit(1)
+        self.lock = threading.Lock()
 
+    def check_proc(self):
+        with self.lock:
+            if self.ffmpeg_process is None:
+                return self.reset()
+            ret_code = self.ffmpeg_process.poll()
+            if ret_code != None:
+                self.ffmpeg_process = None
+                print('TwitchOutputStream: FFMPEG DEAD!', ret_code)
+                time.sleep(5)
+                print('TwitchOutputStream: FFMPEG RETRY!', ret_code)
+                return self.reset()
+            
+    
     def reset(self):
         """
         Reset the videostream by restarting ffmpeg
@@ -101,7 +115,7 @@ class TwitchOutputStream(object):
             # size of one frame
             '-s', '%dx%d' % (self.width, self.height),
             '-pix_fmt', 'rgb24',  # The input are raw bytes
-            '-thread_queue_size', '16384',
+            '-thread_queue_size', str(512),
             '-i', '-',  # The input comes from a pipe
 
             # Twitch needs to receive sound in their streams!
@@ -112,7 +126,7 @@ class TwitchOutputStream(object):
                 '-ar', '%d' % AUDIORATE,
                 '-ac', '2',
                 '-f', 's16le',
-                '-thread_queue_size', '16384',
+                '-thread_queue_size', str(512),
                 '-i', '/tmp/audiopipe'
             ])
         else:
@@ -120,37 +134,25 @@ class TwitchOutputStream(object):
                 '-f', 'lavfi',
                 '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100'
             ])
-        bitrate = '24000k'
+        bitrate = '32000k'
         command.extend([
             # VIDEO CODEC PARAMETERS
-            '-vcodec', 'libx264',
+            *(f'-b:v {bitrate} -minrate:v {bitrate} -maxrate:v {bitrate} -bufsize:v {bitrate} -c:v h264_nvenc -qp:v 12 -preset slow -profile high444p'.split()),
+            # '-vcodec', 'libx264',
+            # '-b:v', bitrate,
+            # '-minrate', bitrate, '-maxrate', bitrate,
+            # '-preset', 'medium', #'-tune', 'zerolatency',
+            # '-crf', '16',
+            # '-pix_fmt', 'yuv420p',
             '-r', '%d' % self.fps,
-            '-b:v', bitrate,
             '-s', '%dx%d' % (self.width, self.height),
-            '-preset', 'medium', #'-tune', 'zerolatency',
-            '-crf', '16',
-            '-pix_fmt', 'yuv420p',
-            # '-force_key_frames', r'expr:gte(t,n_forced*2)',
-            '-minrate', bitrate, '-maxrate', bitrate,
-            '-bufsize', '72000k',
-            '-g', '2',     # key frame distance
-            #'-keyint_min', '1',
-            # '-filter:v "setpts=0.25*PTS"'
-            # '-vsync','passthrough',
+            # '-bufsize', bitrate,
+            '-g', '120',     # key frame distance
 
             # AUDIO CODEC PARAMETERS
             '-acodec', 'libmp3lame', '-ar', '44100', '-b:a', '320k',
             '-bufsize', '960k',
             '-ac', '1',
-            # '-acodec', 'aac', '-strict', 'experimental',
-            # '-ab', '128k', '-ar', '44100', '-ac', '1',
-            #'-async','132300',
-            # '-filter_complex', 'asplit', #for audio sync?
-
-            # STORE THE VIDEO PARAMETERS
-            # '-vcodec', 'libx264', '-s', '%dx%d'%(width, height),
-            # '-preset', 'libx264-fast',
-            # 'my_output_videofile2.avi'
 
             # MAP THE STREAMS
             # use only video from first input and only audio from second
@@ -166,11 +168,15 @@ class TwitchOutputStream(object):
         devnullpipe = subprocess.DEVNULL
         if self.verbose:
             devnullpipe = None
+        my_env = os.environ.copy()
+        my_env["CUDA_VISIBLE_DEVICES"] = "1"
         self.ffmpeg_process = subprocess.Popen(
             command,
             stdin=subprocess.PIPE,
             stderr=devnullpipe,
-            stdout=devnullpipe)
+            stdout=devnullpipe,
+            env=my_env
+        )
 
     def __enter__(self):
         return self
@@ -190,6 +196,8 @@ class TwitchOutputStream(object):
         :type frame: numpy array with shape (height, width, 3)
             containing values between 0.0 and 1.0
         """
+        
+        self.check_proc()
 
         assert frame.shape == (self.height, self.width, 3)
 
@@ -213,6 +221,9 @@ class TwitchOutputStream(object):
         :type right_channel: numpy array with shape (k, )
             containing values between -1.0 and 1.0. k can be any integer
         """
+        
+        self.check_proc()
+        
         if self.audio_pipe is None:
             if not os.path.exists('/tmp/audiopipe'):
                 os.mkfifo('/tmp/audiopipe')

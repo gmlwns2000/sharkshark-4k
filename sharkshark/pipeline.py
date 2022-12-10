@@ -1,4 +1,5 @@
-import json
+import json, os
+os.environ['CUDA_MODULE_LOADING'] = 'lazy'
 import math
 import time, queue
 import torch
@@ -14,6 +15,7 @@ class TwitchUpscalerPostStreamer:
         self.url = url
         self.fps = fps
         self.device = device
+        self.small_batch_size = min(8, int(fps))
 
         self.recoder = TwitchRecoder(
             target_url=self.url, batch_sec=1, fps=self.fps, on_queue=self.recoder_on_queue,
@@ -24,13 +26,15 @@ class TwitchUpscalerPostStreamer:
         #     device=self.device, lr_level=0, on_queue=self.upscaler_on_queue
         # )
         self.upscaler = FsrcnnUpscalerService(
-            device=self.device, lr_level=lr_level, on_queue=self.upscaler_on_queue, denoising=denoising, denoise_rate=denoise_rate
+            device=self.device, lr_level=lr_level, on_queue=self.upscaler_on_queue, 
+            denoising=denoising, denoise_rate=denoise_rate, batch_size=self.small_batch_size
         )
         self.recoder.output_shape = self.upscaler.lr_shape
         #self.upscaler.output_shape = (2160, 3840)
         #self.upscaler.output_shape = (1800, 3200)
         self.upscaler.output_shape = [
             (1440, 2560),
+            (1800, 3200),
             (2160, 3840),
         ][hr_level]
         #self.upscaler.output_shape = (1080, 1920)
@@ -41,9 +45,9 @@ class TwitchUpscalerPostStreamer:
         self.frame_step = 0
         self.last_reported = self.last_streamed = time.time()
         self.frame_skips = frame_skips
-    
+        
     def recoder_on_queue(self, entry:RecoderEntry):
-        small_batch_size = 32
+        small_batch_size = self.small_batch_size
         for i in range(math.ceil(len(entry.frames)/small_batch_size)):
             try:
                 entry.profiler.start('recoder.output.entry')
@@ -142,7 +146,7 @@ if __name__ == '__main__':
     # )
 
     pipeline = TwitchUpscalerPostStreamer(
-        url = TW_ZURURU, fps = 12, denoising=True, lr_level=5, quality='1080p60', frame_skips=True, denoise_rate=0.4, hr_level=0,
+        url = 'https://www.twitch.tv/rkdwl12', fps = 24, denoising=False, lr_level=5, quality='1080p60', frame_skips=True, denoise_rate=0.5, hr_level=0,
     )
 
     # pipeline = TwitchUpscalerPostStreamer(

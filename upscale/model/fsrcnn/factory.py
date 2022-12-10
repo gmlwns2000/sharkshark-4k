@@ -47,7 +47,7 @@ def build_model(factor=4, device=0, input_shape=(720,1280)):
     elif jit_mode == 'trt':
         import torch_tensorrt, os
         torch_tensorrt.logging.set_reportable_log_level(torch_tensorrt.logging.Level.Debug)
-        version = '1'
+        version = '2'
 
         # lr_curr = torch.empty((3, 1, 720, 1280), dtype=torch.half, device=device)
         N, C, H, W = (3, 1, *input_shape)

@@ -6,3 +6,4 @@ ffmpeg/
 *.flv
 *.mp4
 output.txt
+weights/

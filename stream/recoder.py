@@ -48,6 +48,14 @@ class TwitchRecoder:
         return state
 
     def proc(self):
+        print('TwitchRecoder: TwitchImageGrabber init')
+        image_grabber = TwitchImageGrabber(
+            twitch_url=self.url,
+            quality=self.quality,  # quality of the stream could be ["160p", "360p", "480p", "720p", "720p60", "1080p", "1080p60"]
+            blocking=True,
+            rate=self.fps  # frame per rate (fps)
+        )
+        
         # change to a stream that is actually online
         print('TwitchRecoder: TwitchAudioGrabber init')
         audio_grabber = TwitchAudioGrabber(
@@ -57,14 +65,6 @@ class TwitchRecoder:
             rate=44100,  # sampling rate of the audio
             channels=2,  # number of channels
             dtype=np.float32  # quality of the audio could be [np.int16, np.int32, np.float32, np.float64]
-        )
-
-        print('TwitchRecoder: TwitchImageGrabber init')
-        image_grabber = TwitchImageGrabber(
-            twitch_url=self.url,
-            quality=self.quality,  # quality of the stream could be ["160p", "360p", "480p", "720p", "720p60", "1080p", "1080p60"]
-            blocking=True,
-            rate=self.fps  # frame per rate (fps)
         )
 
         t = time.time()
