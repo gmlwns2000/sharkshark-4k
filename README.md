@@ -20,7 +20,7 @@ RTX3090ti 두?장만 있다면 실시간으로 4k의 트위치 스트림을 볼 
 ```
 # with RTX4090 + 3950x, 0.5% frame drop. 720p -> 1440p with RealESRGAN
 
-python -m main.upscaler --url https://www.twitch.tv/vrecord_choki
+python -m main.upscaler --url https://www.twitch.tv/tizmtizm
 ```
 
 # Feature
