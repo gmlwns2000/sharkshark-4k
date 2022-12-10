@@ -61,9 +61,3 @@ Therefore, if you want to apply this upscaler to static image, you should reduce
 With Github issues and pull requests, you can make contributions!
 
 All writings should be writen in English.
-
-# License
-
-GPL 3.0
-
-Not allowed to use this program under commercial purposes.
