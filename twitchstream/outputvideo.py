@@ -83,9 +83,18 @@ class TwitchOutputStream(object):
                 return self.reset()
             ret_code = self.ffmpeg_process.poll()
             if ret_code != None:
+                print("FFMPEG IS FAILED!!!")
+                os.killpg(os.getpgid(os.getpid()), signal.SIGTERM)
+                exit(-1)
+                if self.ffmpeg_process is not None:
+                # Close the previous stream
+                    try:
+                        self.ffmpeg_process.send_signal(signal.SIGTERM)
+                    except OSError:
+                        pass
                 self.ffmpeg_process = None
                 print('TwitchOutputStream: FFMPEG DEAD!', ret_code)
-                time.sleep(5)
+                time.sleep(1)
                 print('TwitchOutputStream: FFMPEG RETRY!', ret_code)
                 return self.reset()
             
@@ -134,25 +143,20 @@ class TwitchOutputStream(object):
                 '-f', 'lavfi',
                 '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100'
             ])
-        bitrate = '32000k'
+        bitrate = '24000k'
         command.extend([
             # VIDEO CODEC PARAMETERS
-            *(f'-b:v {bitrate} -minrate:v {bitrate} -maxrate:v {bitrate} -bufsize:v {bitrate} -c:v h264_nvenc -qp:v 12 -preset slow -profile high444p'.split()),
-            # '-vcodec', 'libx264',
-            # '-b:v', bitrate,
-            # '-minrate', bitrate, '-maxrate', bitrate,
-            # '-preset', 'medium', #'-tune', 'zerolatency',
-            # '-crf', '16',
-            # '-pix_fmt', 'yuv420p',
+            *(f'-b:v {bitrate} -minrate:v {bitrate} -maxrate:v {bitrate} -bufsize:v {bitrate} -c:v h264_nvenc -qp:v 19 -preset slow -profile:v high444p'.split()),
+            # *(f'-vcodec libx264 -b:v {bitrate} -minrate:v {bitrate} -maxrate:v {bitrate} -bufsize:v {bitrate} -preset medium -crf 16 -pix_fmt yuv420p'.split()),
             '-r', '%d' % self.fps,
             '-s', '%dx%d' % (self.width, self.height),
             # '-bufsize', bitrate,
-            '-g', '120',     # key frame distance
+            '-g', str(int(self.fps*2)),     # key frame distance
 
             # AUDIO CODEC PARAMETERS
-            '-acodec', 'libmp3lame', '-ar', '44100', '-b:a', '320k',
-            '-bufsize', '960k',
-            '-ac', '1',
+            '-acodec', 'aac', '-strict', '-2', #'-ar', '44100', '-b:a', '320k',
+            '-bufsize', '320k',
+            #'-ac', '1',
 
             # MAP THE STREAMS
             # use only video from first input and only audio from second
@@ -162,12 +166,14 @@ class TwitchOutputStream(object):
             '-threads', '32',
 
             # STREAM TO TWITCH
-            '-f', 'flv', self.output_file if self.output_file is not None else self.get_closest_ingest(),
+            '-f', 'flv', '-flvflags', 'no_duration_filesize', 
+            self.output_file if self.output_file is not None else self.get_closest_ingest(),
         ])
 
         devnullpipe = subprocess.DEVNULL
         if self.verbose:
             devnullpipe = None
+        # devnullpipe = subprocess.DEVNULL
         my_env = os.environ.copy()
         my_env["CUDA_VISIBLE_DEVICES"] = "1"
         self.ffmpeg_process = subprocess.Popen(

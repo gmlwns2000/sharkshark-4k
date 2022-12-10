@@ -79,6 +79,9 @@ class TwitchStreamer(BaseService):
         
         job.profiler.start('streamer.frames.queue')
         frames_to_send = []
+        if isinstance(job.frames, torch.Tensor):
+            if job.frames.device != 'cpu':
+                job.frames = job.frames.to('cpu', non_blocking=True)
         for i in range(len(job.frames)):
             frame = job.frames[i]
             if isinstance(frame, torch.Tensor):
@@ -89,8 +92,6 @@ class TwitchStreamer(BaseService):
                         frame = torch.nn.functional.interpolate(frame, self.resolution, mode='area')
                     else:
                         frame = torch.nn.functional.interpolate(frame, self.resolution, mode='bicubic')
-                if frame.device != 'cpu':
-                    frame = frame.to('cpu', non_blocking=True)
                 frame = frame.numpy().astype(np.uint8).copy()
             if frame.shape != (*self.resolution, 3):
                 frame = cv2.resize(frame, dsize=(self.resolution[1], self.resolution[0]), interpolation=cv2.INTER_AREA)

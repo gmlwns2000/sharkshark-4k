@@ -135,7 +135,8 @@ class FsrcnnUpscalerService(BaseUpscalerService):
     
     def upscale(self, frames: torch.Tensor):
         assert isinstance(frames, torch.Tensor)
-        frames = frames.to(self.device, non_blocking=True)
+        if frames.device != self.device:
+            frames = frames.to(self.device, non_blocking=True)
         if frames.ndim == 4:
             assert frames.shape[-1] == 3
             N, H, W, C = frames.shape
@@ -152,45 +153,47 @@ class FsrcnnUpscalerService(BaseUpscalerService):
             raise Exception(frames.shape)
     
     def upscale_multi(self, img:torch.Tensor):
-        with torch.cuda.amp.autocast():
+        with torch.no_grad(), torch.cuda.amp.autocast():
             img = img.permute(0,3,1,2)
             img = img / 255.0
             lr_curr_before = lr_curr = torch.nn.functional.interpolate(
-                img, size=self.lr_shape, mode='area'
+                img, size=self.lr_shape, mode='bicubic'
             )
         
         with torch.no_grad(), torch.cuda.amp.autocast():
             self.profiler.start('fsrcnn.model')
             if self.upscaler_model == 'realesrgan':
                 hr_curr = self.model(lr_curr)
+                # hr_curr = lr_curr
             else:
                 raise Exception()
             
             self.profiler.end('fsrcnn.model')
         
-        N, C, H, W = hr_curr.shape
-        hr_curr = hr_curr.view(N, C, H, W)
-        hr_curr_mean = hr_curr.view(N, C, H*W).mean(dim=-1).view(N, C, 1, 1)
-        hr_curr_std = hr_curr.view(N, C, H*W).std(dim=-1).view(N, C, 1, 1)
-        N, C, LH, LW = lr_curr_before.shape
-        img_mean = lr_curr_before.view(N, C, LH*LW).mean(dim=-1).view(N, C, 1, 1)
-        img_std = lr_curr_before.view(N, C, LH*LW).std(dim=-1).view(N, C, 1, 1)
-        hr_curr = (hr_curr - hr_curr_mean) / (hr_curr_std + 1e-8)
-        hr_curr = hr_curr * img_std + img_mean
-        hr_curr = hr_curr.view(N, C, H, W)
-
-        _hr_curr = torch.clamp(hr_curr, 0, 1)
-        if self.output_shape is not None:
-            if self.output_shape[0] >= _hr_curr.shape[0]:
-                _hr_curr = torch.nn.functional.interpolate(
-                    _hr_curr, size=self.output_shape, mode='bicubic'
-                )
-            else:
-                _hr_curr = torch.nn.functional.interpolate(
-                    _hr_curr, size=self.output_shape, mode='area'
-                )
-        _hr_curr = torch.clamp(_hr_curr, 0, 1)
-        return (_hr_curr * 255).permute(0,2,3,1).to(torch.uint8, non_blocking=True)
+        with torch.no_grad(), torch.cuda.amp.autocast():
+            N, C, H, W = hr_curr.shape
+            hr_curr = hr_curr.view(N, C, H, W)
+            hr_curr_mean = hr_curr.view(N, C, H*W).mean(dim=-1).view(N, C, 1, 1)
+            hr_curr_std = hr_curr.view(N, C, H*W).std(dim=-1).view(N, C, 1, 1)
+            N, C, LH, LW = lr_curr_before.shape
+            img_mean = lr_curr_before.view(N, C, LH*LW).mean(dim=-1).view(N, C, 1, 1)
+            img_std = lr_curr_before.view(N, C, LH*LW).std(dim=-1).view(N, C, 1, 1)
+            hr_curr = (hr_curr - hr_curr_mean) / (hr_curr_std + 1e-8)
+            hr_curr = hr_curr * img_std + img_mean
+            hr_curr = hr_curr.view(N, C, H, W)
+            
+            _hr_curr = torch.clamp(hr_curr, 0, 1)
+            if self.output_shape is not None:
+                if self.output_shape[0] >= _hr_curr.shape[0]:
+                    _hr_curr = torch.nn.functional.interpolate(
+                        _hr_curr, size=self.output_shape, mode='bicubic'
+                    )
+                else:
+                    _hr_curr = torch.nn.functional.interpolate(
+                        _hr_curr, size=self.output_shape, mode='area'
+                    )
+            _hr_curr = torch.clamp(_hr_curr, 0, 1)
+            return (_hr_curr * 255).permute(0,2,3,1).to(torch.uint8, non_blocking=True)
     
     def upscale_single(self, img:torch.Tensor):
         with torch.cuda.amp.autocast():

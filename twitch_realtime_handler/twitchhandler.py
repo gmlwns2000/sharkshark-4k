@@ -28,7 +28,7 @@ class _TwitchHandler():
             raise ValueError("No twitch_url specified")
         try:
             sess = Streamlink()
-            sess.set_plugin_option("twitch", "disable-ads", True)
+            sess.set_plugin_option("twitch", "disable-ads", False)
             sess.set_plugin_option("twitch", "low-latency", False)
             #sess.set_option('http-proxy', 'sock5h://72.210.221.197:4145')
             # sess.set_option('http-proxy', 'socks4://103.47.216.19:4145')

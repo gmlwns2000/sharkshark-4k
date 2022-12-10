@@ -15,7 +15,7 @@ class TwitchUpscalerPostStreamer:
         self.url = url
         self.fps = fps
         self.device = device
-        self.small_batch_size = min(8, int(fps))
+        self.small_batch_size = min(4, int(fps))
 
         self.recoder = TwitchRecoder(
             target_url=self.url, batch_sec=1, fps=self.fps, on_queue=self.recoder_on_queue,
@@ -51,13 +51,14 @@ class TwitchUpscalerPostStreamer:
         for i in range(math.ceil(len(entry.frames)/small_batch_size)):
             try:
                 entry.profiler.start('recoder.output.entry')
-                frames = torch.tensor(entry.frames[i*small_batch_size:(i+1)*small_batch_size], dtype=torch.float32, requires_grad=False)
+                frames = torch.tensor(entry.frames[i*small_batch_size:(i+1)*small_batch_size], dtype=torch.uint8, requires_grad=False)
                 assert small_batch_size != 0
                 assert (math.ceil(len(entry.frames)/small_batch_size)) != 0
                 audio_segment = torch.tensor(entry.audio_segment[
                     i*(len(entry.audio_segment)//(math.ceil(len(entry.frames)/small_batch_size))):
                     (i+1)*(len(entry.audio_segment)//(math.ceil(len(entry.frames)/small_batch_size)))
                 ], requires_grad=False)
+                frames = frames.to(self.device)
                 frames.share_memory_()
                 audio_segment.share_memory_()
                 entry.profiler.set('recoder.output.frames.shape', str(tuple(frames.shape)))
@@ -77,16 +78,16 @@ class TwitchUpscalerPostStreamer:
                 print("TwitchUpscalerPostStreamer: recoder output skipped")
 
     def upscaler_on_queue(self, entry:UpscalerQueueEntry):
-        print(
-            f'TwitchUpscalerPostStreamer: upscaled, '+\
-            f'tensor{entry.frames[0].shape}[{len(entry.frames)}], {entry.step}, '+\
-            f'elapsed: {entry.elapsed*1000:.1f}ms, onqueue'
-        )
+        # print(
+        #     f'TwitchUpscalerPostStreamer: upscaled, '+\
+        #     f'tensor{entry.frames[0].shape}[{len(entry.frames)}], {entry.step}, '+\
+        #     f'elapsed: {entry.elapsed*1000:.1f}ms, onqueue'
+        # )
         try:
             entry.profiler.start('upscaler.output.queue')
-            frames = entry.frames.detach()#.cpu()
+            frames = entry.frames.detach().clone()#.to('cpu')
             #frames = (frames*255).to(torch.uint8)
-            audio_segments = entry.audio_segment.detach()#.cpu()
+            audio_segments = entry.audio_segment.detach().clone()#.to('cpu')
             if not frames.is_shared():
                 frames.share_memory_()
             if not audio_segments.is_shared():
@@ -127,7 +128,8 @@ class TwitchUpscalerPostStreamer:
         self.streamer.stop()
 
     def join(self):
-        self.streamer.join()
+        code = self.streamer.join()
+        if code: raise Exception('streamer failed')
         self.upscaler.join()
         self.recoder.join()
 
@@ -146,7 +148,8 @@ if __name__ == '__main__':
     # )
 
     pipeline = TwitchUpscalerPostStreamer(
-        url = 'https://www.twitch.tv/rkdwl12', fps = 24, denoising=False, lr_level=5, quality='1080p60', frame_skips=True, denoise_rate=0.5, hr_level=0,
+        url = 'https://www.twitch.tv/viichan6', fps = 20, denoising=False, lr_level=5, quality='1080p60', frame_skips=True, denoise_rate=1.0, hr_level=0,
+        output_file='rtmp://127.0.0.1:1935/live'
     )
 
     # pipeline = TwitchUpscalerPostStreamer(
