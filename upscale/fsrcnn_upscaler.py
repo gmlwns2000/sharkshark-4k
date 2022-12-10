@@ -156,9 +156,11 @@ class FsrcnnUpscalerService(BaseUpscalerService):
         with torch.no_grad(), torch.cuda.amp.autocast():
             img = img.permute(0,3,1,2)
             img = img / 255.0
-            lr_curr_before = lr_curr = torch.nn.functional.interpolate(
-                img, size=self.lr_shape, mode='bicubic'
-            )
+            lr_curr_before = lr_curr = img
+            if img.shape[-1] > self.lr_shape[-1] or img.shape[-2] > self.lr_shape[-2]:
+                lr_curr_before = lr_curr = torch.nn.functional.interpolate(
+                    img, size=self.lr_shape, mode='area'
+                )
         
         with torch.no_grad(), torch.cuda.amp.autocast():
             self.profiler.start('fsrcnn.model')

@@ -148,7 +148,7 @@ if __name__ == '__main__':
     # )
 
     pipeline = TwitchUpscalerPostStreamer(
-        url = 'https://www.twitch.tv/viichan6', fps = 20, denoising=False, lr_level=5, quality='1080p60', frame_skips=True, denoise_rate=1.0, hr_level=0,
+        url = 'https://www.twitch.tv/rkdwl12', fps = 20, denoising=False, lr_level=5, quality='1080p60', frame_skips=True, denoise_rate=1.0, hr_level=0,
         output_file='rtmp://127.0.0.1:1935/live'
     )
 
