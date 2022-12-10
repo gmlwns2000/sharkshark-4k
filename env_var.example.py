@@ -1,0 +1,3 @@
+TWITCH_STREAMKEY = 'live_'
+TWITCH_OAUTH = 'oauth:'
+TWITCH_USERNAME = 'AinL'
