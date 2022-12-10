@@ -2,7 +2,7 @@ from dataclasses import dataclass
 import queue, torch
 import time
 import threading
-from twitchstream.outputvideo import TwitchBufferedOutputStream
+from twitchstream.outputvideo import TwitchBufferedOutputStream, TwitchOutputStream
 from twitchstream.chat import TwitchChatStream
 from upscale.base_service import BaseService
 from env_var import *
@@ -126,11 +126,6 @@ class TwitchStreamer(BaseService):
 
         job.profiler.start('streamer.send.queue')
         for i in range(len(frames_to_send)):
-            seg = audio_segs_to_send[i]
-            job.profiler.start('streamer.send.queue.audio')
-            videostream.send_audio(seg[:,0], seg[:,1])
-            job.profiler.end('streamer.send.queue.audio')
-
             frame = frames_to_send[i] #type: np.ndarray
             job.profiler.start('streamer.send.queue.txt')
             if isinstance(frame, np.ndarray):
@@ -146,6 +141,11 @@ class TwitchStreamer(BaseService):
             self.frame_count += 1
             videostream.send_video_frame(frame)
             job.profiler.end('streamer.send.queue.video')
+            
+            seg = audio_segs_to_send[i]
+            job.profiler.start('streamer.send.queue.audio')
+            videostream.send_audio(seg[:,0], seg[:,1])
+            job.profiler.end('streamer.send.queue.audio')
         job.profiler.end('streamer.send.queue')
 
         self.last_step = job.step

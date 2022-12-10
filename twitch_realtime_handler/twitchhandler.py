@@ -4,6 +4,7 @@
 Parent classes for twitch-realtime-handler
 """
 
+import os
 import queue
 import subprocess
 from dataclasses import dataclass, field
@@ -24,6 +25,11 @@ class _TwitchHandler():
 
     def get_stream_url(self) -> None:
         """Retrieve the url of the rtmp stream from twitch url using streamlink"""
+        if(os.path.exists(self.twitch_url)):
+            print('given path is file', self.twitch_url)
+            self._stream_url = self.twitch_url
+            return
+        
         if self.twitch_url is None:
             raise ValueError("No twitch_url specified")
         try:

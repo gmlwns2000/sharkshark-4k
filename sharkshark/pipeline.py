@@ -118,7 +118,8 @@ class TwitchUpscalerPostStreamer:
             print("TwitchUpscalerPostStreamer: upscaler output skipped")
     
     def streamer_on_queue(self, entry:TwitchStreamerEntry):
-        print(f'TwitchUpscalerPostStreamer: streamed, idx: {entry.step}, took: {(time.time()-self.last_streamed)*1000:.1f}ms, frames[{len(entry.frames)},{entry.frames[0].shape}]')
+        print(f'TwitchUpscalerPostStreamer: streamed, idx: {entry.step}, took: {(time.time()-self.last_streamed)*1000:.1f}ms, '+\
+            f'frames[{len(entry.frames)},{entry.frames[0].shape}], {entry.frames[0,0,0,0]}/{entry.audio_segments[0,0]:.4f}[{entry.audio_segments.shape}]')
         entry.profiler.set('upscaler.upscale.per_frame_ms', (entry.profiler.data['upscaler.upscale'] / len(entry.frames))*1000)
         if (time.time()-self.last_reported) > 3.0:
             entry.profiler.set('upscaler.inputq', self.upscaler.job_queue.qsize())

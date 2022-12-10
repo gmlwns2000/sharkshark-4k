@@ -148,7 +148,9 @@ class TwitchOutputStream(object):
         command.extend([
             # VIDEO CODEC PARAMETERS
             # -profile:v high444p
-            *(f'-bufsize:v 100M -c:v h264_nvenc -cq 23 -preset p7 -spatial-aq 1 -temporal-aq 1 -b_ref_mode 2 -bf 4 -rc-lookahead 20'.split()),
+            *(f'-bufsize:v 100M -c:v h264_nvenc -cq 21 -preset p7 -spatial-aq 1 -temporal-aq 1 -b_ref_mode 2 -bf 4 -rc-lookahead 20'.split()),
+            # *(f'-bufsize:v 100M -c:v h264_nvenc -cq 23 -preset medium'.split()),
+            # *(f'-vcodec libx264 -cq 19 -bufsize:v 100M -preset veryslow -pix_fmt yuv444p'.split()), #for static video
             # *(f'-vcodec libx264 -b:v {bitrate} -minrate:v {bitrate} -maxrate:v {bitrate} -bufsize:v {bitrate} -preset medium -crf 16 -pix_fmt yuv420p'.split()),
             '-r', '%d' % self.fps,
             '-s', '%dx%d' % (self.width, self.height),
@@ -178,6 +180,7 @@ class TwitchOutputStream(object):
         # devnullpipe = subprocess.DEVNULL
         my_env = os.environ.copy()
         my_env["CUDA_VISIBLE_DEVICES"] = "1"
+        print('ffmpeg output', command)
         self.ffmpeg_process = subprocess.Popen(
             command,
             stdin=subprocess.PIPE,
@@ -365,9 +368,9 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
 
         # don't call the functions directly, as they block on the first
         # call
-        self.t = threading.Timer(0.0, self._send_video_frame)
-        self.t.daemon = True
-        self.t.start()
+        self.tv = threading.Timer(0.0, self._send_video_frame)
+        self.tv.daemon = True
+        self.tv.start()
 
         if self.audio_enabled:
             # send audio at about the same rate as video
@@ -378,9 +381,9 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
             self.next_audio_send_time = None
             self.audio_frame_counter = 0
             self.q_audio = queue.PriorityQueue(maxsize=BUFFER_QSIZE)
-            self.t = threading.Timer(0.0, self._send_audio)
-            self.t.daemon = True
-            self.t.start()
+            self.ta = threading.Timer(0.0, self._send_audio)
+            self.ta.daemon = True
+            self.ta.start()
 
     def _send_video_frame(self):
         start_time = time.time()
@@ -410,15 +413,15 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
             return
 
         # send the next frame at the appropriate time
-        FASTER_SLEEP = 1.0
+        FASTER_SLEEP = 0.1
         if self.next_video_send_time is None:
-            self.t = threading.Timer(1./self.fps * FASTER_SLEEP, self._send_video_frame)
+            self.tv = threading.Timer(1./self.fps * FASTER_SLEEP, self._send_video_frame)
             self.next_video_send_time = start_time + 1./self.fps
         else:
             self.next_video_send_time += 1./self.fps
             next_event_time = (self.next_video_send_time - start_time) * FASTER_SLEEP
             if next_event_time > 0:
-                self.t = threading.Timer(next_event_time,
+                self.tv = threading.Timer(next_event_time,
                                          self._send_video_frame)
             else:
                 # we should already have sent something!
@@ -428,11 +431,11 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
                 # self.send_me_last_frame_again()
                 #
                 # other solution:
-                self.t = threading.Thread(
+                self.tv = threading.Thread(
                     target=self._send_video_frame)
 
-        self.t.daemon = True
-        self.t.start()
+        self.tv.daemon = True
+        self.tv.start()
 
     def _send_audio(self):
         start_time = time.time()
@@ -464,16 +467,16 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
         else:
             downstream_time = len(left_audio) / AUDIORATE
 
-        FASTER_SLEEP = 1.0
+        FASTER_SLEEP = 0.1
         if self.next_audio_send_time is None:
-            self.t = threading.Timer(downstream_time*FASTER_SLEEP,
+            self.ta = threading.Timer(downstream_time*FASTER_SLEEP,
                                      self._send_audio)
             self.next_audio_send_time = start_time + downstream_time
         else:
             self.next_audio_send_time += downstream_time
             next_event_time = self.next_audio_send_time - start_time
             if next_event_time > 0:
-                self.t = threading.Timer(next_event_time*FASTER_SLEEP,
+                self.ta = threading.Timer(next_event_time*FASTER_SLEEP,
                                          self._send_audio)
             else:
                 # we should already have sent something!
@@ -483,11 +486,11 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
                 # self.send_me_last_frame_again()
                 #
                 # other solution:
-                self.t = threading.Thread(
+                self.ta = threading.Thread(
                     target=self._send_audio)
 
-        self.t.daemon = True
-        self.t.start()
+        self.ta.daemon = True
+        self.ta.start()
 
     def send_video_frame(self, frame, frame_counter=None):
         """send frame of shape (height, width, 3)

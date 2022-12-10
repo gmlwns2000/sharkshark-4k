@@ -15,6 +15,9 @@ python -m main.upscaler --url https://www.twitch.tv/videos/1663212121 --no-frame
 
 # For fix audio sync. When audio_queue > 0, the audio is delayed about `audio_queue` seconds. Should be integer
 python -m main.upscaler --url https://www.twitch.tv/tizmtizm --audio-queue 1
+
+# For process local file, FLV file should be played in VLC
+python -m main.upscaler --url mashup.mp4 --quality 1080p --no-frame-skips --output-file output.flv --hr-level 2 --lr-level 5 --fps 32
 """, formatter_class=argparse.RawTextHelpFormatter)
     parser.add_argument('--url', type=str, default=TW_VIICHAN, help='default=GORANI')
     parser.add_argument('--quality', type=str, default='1080p60', help='ex: 1080p60, 720p60, 360p, etc. depending on providers')
