@@ -6,6 +6,8 @@ Twitch Stream Upscaler 4K.
 
 Written by AinL.
 
+[Sample Video (https://www.youtube.com/watch?v=SXE-gIU3yJs)](https://www.youtube.com/watch?v=60-tXR3XW68)
+
 ![](https://ifh.cc/g/LjbTr2.jpg)
 
 # Introduction
@@ -25,11 +27,12 @@ python -m main.upscaler --url https://www.twitch.tv/tizmtizm
 
 # Feature
 
-- Realtime 1440p12 upscale from 720p60 on any Twitch live stream!
-- Realtime 1440p12 upscale from 1080p60 on any Twitch live stream!
+- Realtime 1440p24 upscale from 720p60 on any Twitch live stream!
+- Realtime 1440p24 upscale from 1080p60 on any Twitch live stream!
+- Local file upscale from 1080p to 4K!
 
 Upscaler pipeline is designed for handling high noise 720p Twitch stream.
-Therefore, if you want to apply this upscaler to static image, you should reduce or disable denoiser
+Therefore, if you want to apply this upscaler to static image, you should reduce or disable denoiser.
 
 # Samples
 
@@ -50,14 +53,23 @@ Therefore, if you want to apply this upscaler to static image, you should reduce
 
 # To-Do
 
-- Good looking client interface
-- Web based RTMP viewer
-- Faster upscaling model
-- Faster denoise model
-- MPEG noise specialized denoiser
+- Chrome extension for automatic upscaling image.
+  - Upscale cache with CloudFlare R2.
+- Good looking client interface.
+- Faster upscaling model.
+- Faster denoise model.
+
+# Requirement
+
+1. TensorRT
+2. RealESRGAN: Commit @ 5ca1078535923d485892caee7d7804380bfc87fd
 
 # Contribution
 
 With Github issues and pull requests, you can make contributions!
 
 All writings should be writen in English.
+
+# References
+
+BSVD, RealESRGAN, ESRGAN, FSRCNN
