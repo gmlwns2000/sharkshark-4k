@@ -59,6 +59,11 @@ Therefore, if you want to apply this upscaler to static image, you should reduce
 - Faster upscaling model.
 - Faster denoise model.
 
+# Requirement
+
+1. TensorRT
+2. RealESRGAN: Commit @ 5ca1078535923d485892caee7d7804380bfc87fd
+
 # Contribution
 
 With Github issues and pull requests, you can make contributions!
