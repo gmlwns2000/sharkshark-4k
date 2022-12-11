@@ -6,6 +6,8 @@ Twitch Stream Upscaler 4K.
 
 Written by AinL.
 
+[Sample Video (https://www.youtube.com/watch?v=SXE-gIU3yJs)](https://www.youtube.com/watch?v=60-tXR3XW68)
+
 ![](https://ifh.cc/g/LjbTr2.jpg)
 
 # Introduction
