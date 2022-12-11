@@ -7,3 +7,4 @@ ffmpeg/
 *.mp4
 output.txt
 weights/
+cache/

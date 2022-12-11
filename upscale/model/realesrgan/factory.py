@@ -105,7 +105,7 @@ class RealESRGANWrapper(nn.Module):
     def forward(self, x):
         return self.up.enhance(x, outscale=self.scale)[0]
 
-def build_model(factor=4, device=0, input_shape=(720,1280), batch_size=8, denoise_rate=0.5):
+def build_model(factor=4, device=0, input_shape=(720,1280), batch_size=8, denoise_rate=0.5, jit_mode=None):
     args = ArgsData()
     args.denoise_strength = denoise_rate
     args.model_name = args.model_name.split('.')[0]
@@ -173,7 +173,7 @@ def build_model(factor=4, device=0, input_shape=(720,1280), batch_size=8, denois
     model = model.eval().to(device)
 
     half_convert = False
-    jit_mode = 'trt'
+    jit_mode = 'trt' if jit_mode is None else jit_mode
     if jit_mode == 'jit':
         model_ft = model
         lr_curr = torch.empty((batch_size, 3, 720, 1280), dtype=torch.float32, device=device)

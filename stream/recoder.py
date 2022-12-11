@@ -84,26 +84,52 @@ class TwitchRecoder:
             except Empty:
                 pass
             
-            #print('f')
-            audio_segment = audio_grabber.grab()
-            if self.audio_skip > 0:
-                while self.audio_queue.qsize() < self.audio_skip:
-                    self.audio_queue.put(audio_segment.copy())
-                audio_segment = self.audio_queue.get()
             #print('ff')
             frames = []
+            reader_eof = False
             for i in range(self.batch_sec * self.fps):
                 frame = image_grabber.grab()
-                if frame is None: raise Exception('frame recodered None!')
+                if frame is None: 
+                    print('frame recoded none EOF')
+                    reader_eof = True
+                    break
+                    #raise Exception('frame recodered None!')
                 # print(f'grabbed {self.frame_count}, {frame[0,0,0]}')
                 if self.output_shape is not None:
                     frame = cv2.resize(frame, dsize=[self.output_shape[1], self.output_shape[0]], interpolation=cv2.INTER_AREA)
                     frame = cv2.putText(frame, f"Received: {self.frame_count} frames", (10, 64), cv2.FONT_HERSHEY_PLAIN, 1, (255,0,0), 1)
                     self.frame_count += 1
                 frames.append(frame)
+            
+            if reader_eof:
+                entry = RecoderEntry(
+                    index=index,
+                    audio_segment=None, #(22000,2)
+                    frames=None, #(24, 1080, 1920,3) -> (24, 2160, 3840, 3)
+                    fps=self.fps,
+                    profiler=Profiler()
+                )
+                entry.profiler.start('recoder.output')
+                if self.on_queue is not None:
+                    self.on_queue(entry)
+                else:
+                    try:
+                        self.queue.put_nowait(entry)
+                    except queue.Full:
+                        print(f'TwitchRecoder: output queue is full. Is consumer too slow?')
+                break
+            
             if len(frames) == 0:
                 print(f'TwitchRecoder: frame does not recorded...')
                 continue
+            
+            #print('f')
+            audio_segment = audio_grabber.grab()
+            if self.audio_skip > 0:
+                while self.audio_queue.qsize() < self.audio_skip:
+                    self.audio_queue.put(audio_segment.copy())
+                audio_segment = self.audio_queue.get()
+            
             frames = np.stack(frames, axis=0)
             t_sum.append(time.time()-t)
             if len(t_sum) > 100:

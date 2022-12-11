@@ -17,11 +17,11 @@ class TwitchUpscalerPostStreamer:
         #device settings
         device=0, 
         #upscaler settings
-        lr_level=3, hr_level=0, upscale_method='fsrcnn',
+        lr_level=3, hr_level=0, upscale_method='fsrcnn', jit_mode=None,
         #denoiser settings
         denoising=True, denoise_rate=1.0, 
         #sync
-        audio_skip=0
+        audio_skip=0,
     ) -> None:
         self.url = url
         self.fps = fps
@@ -38,7 +38,7 @@ class TwitchUpscalerPostStreamer:
         # )
         self.upscaler = FsrcnnUpscalerService(
             device=self.device, lr_level=lr_level, on_queue=self.upscaler_on_queue, 
-            denoising=denoising, denoise_rate=denoise_rate, batch_size=self.small_batch_size
+            denoising=denoising, denoise_rate=denoise_rate, batch_size=self.small_batch_size, jit_mode=jit_mode
         )
         self.recoder.output_shape = self.upscaler.lr_shape
         self.upscaler.output_shape = [
@@ -57,24 +57,11 @@ class TwitchUpscalerPostStreamer:
         self.frame_skips = frame_skips
         
     def recoder_on_queue(self, entry:RecoderEntry):
-        small_batch_size = self.small_batch_size
-        for i in range(math.ceil(len(entry.frames)/small_batch_size)):
+        if entry.frames is None:
             try:
-                entry.profiler.start('recoder.output.entry')
-                frames = torch.tensor(entry.frames[i*small_batch_size:(i+1)*small_batch_size], dtype=torch.uint8, requires_grad=False)
-                assert small_batch_size != 0
-                assert (math.ceil(len(entry.frames)/small_batch_size)) != 0
-                audio_segment = torch.tensor(entry.audio_segment[
-                    i*(len(entry.audio_segment)//(math.ceil(len(entry.frames)/small_batch_size))):
-                    (i+1)*(len(entry.audio_segment)//(math.ceil(len(entry.frames)/small_batch_size)))
-                ], requires_grad=False)
-                frames = frames.to(self.device)
-                frames.share_memory_()
-                audio_segment.share_memory_()
-                entry.profiler.set('recoder.output.frames.shape', str(tuple(frames.shape)))
                 new_entry = UpscalerQueueEntry(
-                    frames=frames, 
-                    audio_segment=audio_segment, 
+                    frames=None, 
+                    audio_segment=None, 
                     step=self.frame_step,
                     profiler=entry.profiler
                 )
@@ -84,8 +71,39 @@ class TwitchUpscalerPostStreamer:
                     self.upscaler.push_job_nowait(new_entry)
                 else:
                     self.upscaler.push_job(new_entry)
+                raise Exception('TODO: finish pipeline until None reach to the end.')
             except queue.Full:
                 print("TwitchUpscalerPostStreamer: recoder output skipped")
+        else:
+            small_batch_size = self.small_batch_size
+            for i in range(math.ceil(len(entry.frames)/small_batch_size)):
+                try:
+                    entry.profiler.start('recoder.output.entry')
+                    frames = torch.tensor(entry.frames[i*small_batch_size:(i+1)*small_batch_size], dtype=torch.uint8, requires_grad=False)
+                    assert small_batch_size != 0
+                    assert (math.ceil(len(entry.frames)/small_batch_size)) != 0
+                    audio_segment = torch.tensor(entry.audio_segment[
+                        i*(len(entry.audio_segment)//(math.ceil(len(entry.frames)/small_batch_size))):
+                        (i+1)*(len(entry.audio_segment)//(math.ceil(len(entry.frames)/small_batch_size)))
+                    ], requires_grad=False)
+                    frames = frames.to(self.device)
+                    frames.share_memory_()
+                    audio_segment.share_memory_()
+                    entry.profiler.set('recoder.output.frames.shape', str(tuple(frames.shape)))
+                    new_entry = UpscalerQueueEntry(
+                        frames=frames, 
+                        audio_segment=audio_segment, 
+                        step=self.frame_step,
+                        profiler=entry.profiler
+                    )
+                    self.frame_step += 1
+                    entry.profiler.end('recoder.output.entry')
+                    if self.frame_skips:
+                        self.upscaler.push_job_nowait(new_entry)
+                    else:
+                        self.upscaler.push_job(new_entry)
+                except queue.Full:
+                    print("TwitchUpscalerPostStreamer: recoder output skipped")
 
     def upscaler_on_queue(self, entry:UpscalerQueueEntry):
         # print(

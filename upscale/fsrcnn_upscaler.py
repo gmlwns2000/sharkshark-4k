@@ -84,7 +84,10 @@ def sharpen_ker(channels=1, strength=1.0):
 class FsrcnnUpscalerService(BaseUpscalerService):
     profiler: Profiler
 
-    def __init__(self, lr_level=3, device=0, on_queue=None, denoising=True, denoise_rate=1.0, upscaler_model='realesrgan', batch_size=1):
+    def __init__(self, 
+        lr_level=3, device=0, on_queue=None, denoising=True, denoise_rate=1.0, 
+        upscaler_model='realesrgan', batch_size=1, jit_mode=None, lr_hr_resize=True
+    ):
         self.lr_shape = [
             (360, 640),
             (540, 960),
@@ -105,6 +108,8 @@ class FsrcnnUpscalerService(BaseUpscalerService):
 
         self.denoising = denoising
         self.batch_size = batch_size
+        self.jit_mode = jit_mode
+        self.lr_hr_resize = lr_hr_resize
 
         super().__init__()
     
@@ -118,7 +123,7 @@ class FsrcnnUpscalerService(BaseUpscalerService):
         elif self.upscaler_model == 'realesrgan':
             self.model = build_model_esrgan(
                 factor=self.scale, device=self.device, input_shape=self.lr_shape, 
-                batch_size=self.batch_size, denoise_rate=self.denoise_rate
+                batch_size=self.batch_size, denoise_rate=self.denoise_rate, jit_mode=self.jit_mode
             ).eval()
         else: raise Exception(self.upscaler_model)
         if self.denoising:
@@ -158,7 +163,7 @@ class FsrcnnUpscalerService(BaseUpscalerService):
             img = img.permute(0,3,1,2)
             img = img / 255.0
             lr_curr_before = lr_curr = img
-            if img.shape[-1] > self.lr_shape[-1] or img.shape[-2] > self.lr_shape[-2]:
+            if (img.shape[-1] > self.lr_shape[-1] or img.shape[-2] > self.lr_shape[-2]) and self.lr_hr_resize:
                 lr_curr_before = lr_curr = torch.nn.functional.interpolate(
                     img, size=self.lr_shape, mode='area'
                 )
@@ -186,7 +191,7 @@ class FsrcnnUpscalerService(BaseUpscalerService):
             hr_curr = hr_curr.view(N, C, H, W)
             
             _hr_curr = torch.clamp(hr_curr, 0, 1)
-            if self.output_shape is not None:
+            if (self.output_shape is not None) and self.lr_hr_resize:
                 if self.output_shape[0] >= _hr_curr.shape[0]:
                     _hr_curr = torch.nn.functional.interpolate(
                         _hr_curr, size=self.output_shape, mode='bicubic'
