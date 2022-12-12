@@ -90,12 +90,27 @@ function is_elem_visible(elem) {
     return true;
 }
 
+function url_ban(url) {
+    if (typeof url === 'string' || url instanceof String) {
+        if(url.includes('.svg')) {
+            // console.log('url ban', url)
+            return true;
+        }
+        if(url.includes('svg+xml')) {
+            // console.log('url ban', url)
+            return true;
+        }
+    }
+    return false;
+}
+
 async function proc_img(img, event) {
     // console.log('proc_img', img.src)
     if(
         (!img.ss4_status || img.ss4_status === 'pending' || (img.old_src && (img.ss4_src !== img.src))) && 
         img.src && is_elem_visible(img) &&
-        ((img.naturalWidth / (img.clientWidth + 0.00001)) < 4.0)
+        ((img.naturalWidth / (img.clientWidth + 0.00001)) < 4.0) &&
+        (!url_ban(img.src))
     ) {
         img.ss4_status = 'working'
         // console.log(img.src)
@@ -160,6 +175,6 @@ let initialied = false;
 if(!initialied) {
     initialied = true;
     proc_all();
-    setInterval(proc_all, 3000);
+    setInterval(proc_all, 5000);
     window.addEventListener('scroll', proc_all);
 }
