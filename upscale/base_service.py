@@ -1,14 +1,16 @@
 import abc, time, os
 from queue import Empty, Full
+import traceback
 import torch.multiprocessing as mp
 
 
 class BaseService(metaclass=abc.ABCMeta):
     on_queue = None
+    exit_on_error = False
 
     def __init__(self) -> None:
-        self.job_queue = mp.Queue(maxsize=32)
-        self.result_queue = mp.Queue(maxsize=1)
+        self.job_queue = mp.Queue(maxsize=48)
+        self.result_queue = mp.Queue(maxsize=48)
         self.cmd_queue = mp.Queue(maxsize=4096)
         self.proc = mp.Process(target=self.proc_pre_main, daemon=True)
     
@@ -26,34 +28,42 @@ class BaseService(metaclass=abc.ABCMeta):
         self.proc_main()
 
     def proc_main(self):
-        self.proc_init()
+        try:
+            self.proc_init()
 
-        while True:
-            cmd_exit = False
             while True:
-                try:
-                    cmd = self.cmd_queue.get_nowait()
-                    if cmd == 'exit':
-                        cmd_exit = True
-                except Empty:
+                cmd_exit = False
+                while True:
+                    try:
+                        cmd = self.cmd_queue.get_nowait()
+                        if cmd == 'exit':
+                            cmd_exit = True
+                    except Empty:
+                        break
+                if cmd_exit:
                     break
-            if cmd_exit:
-                break
-            
-            try:
-                job = self.job_queue.get_nowait()
-                entry = self.proc_job_recieved(job)
+                
                 try:
-                    if self.on_queue is not None:
-                        self.on_queue(entry)
-                    else:
-                        self.result_queue.put_nowait(entry)
-                except Full:
-                    print('BaseUpscaler.proc_main: Result queue is full. Is consumer not fast enough?')
-            except Empty:
-                time.sleep(0.001)
+                    job = self.job_queue.get_nowait()
+                    entry = self.proc_job_recieved(job)
+                    try:
+                        if self.on_queue is not None:
+                            self.on_queue(entry)
+                        else:
+                            self.result_queue.put_nowait(entry)
+                    except Full:
+                        print('BaseUpscaler.proc_main: Result queue is full. Is consumer not fast enough?')
+                except Empty:
+                    time.sleep(0.001)
 
-        os.kill(os.getpid(), 0)
+            os.kill(os.getpid(), 15)
+        except Exception as ex:
+            if self.exit_on_error:
+                traceback.print_exc()
+                print(ex)
+                os.killpg(os.getpgid(os.getpid()), 15)
+            else:
+                raise ex
 
     def push_job(self, entry, timeout=10):
         self.job_queue.put(entry, timeout=timeout)

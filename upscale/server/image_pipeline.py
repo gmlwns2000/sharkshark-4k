@@ -37,6 +37,7 @@ def get_pipeline():
                 lr_level=3, device=0, denoising=False, denoise_rate=0.2, 
                 upscaler_model='realesrgan', batch_size=1, jit_mode=False, lr_hr_resize=False
             )
+            upscaler.exit_on_error = True
             upscaler.start()
             logging.info('Upscaler started')
     return upscaler
@@ -284,7 +285,16 @@ def upscale_image():
     profiler.start('endpoint.io.imdecode')
     buffer = io.BytesIO(buffer)
     try:
-        img = np.asarray(Image.open(buffer))
+        pil_img = Image.open(buffer)
+        if not pil_img.mode in ['RGB', 'RGBA']:
+            if pil_img.mode in ('RGBA', 'LA') or (pil_img.mode == 'P' and 'transparency' in pil_img.info):
+                pil_img = pil_img.convert('RGBA')
+            else:
+                pil_img = pil_img.convert('RGB')
+        img = np.asarray(pil_img)
+        logger.debug(f'upscale origianl shape {img.shape}')
+        # aa = Image.open(buffer)
+        # aa.save('hello.jpg')
     except PIL.UnidentifiedImageError:
         img = None
     profiler.end('endpoint.io.imdecode')
@@ -314,6 +324,7 @@ def upscale_image():
     if img.shape[-1] == 4:
         alpha_map = img[:,:,-1]
         img = img[:,:,:3]
+        logger.debug(f'upscale alpha map {alpha_map.shape}')
     
     if img.shape[-1] != 3:
         logger.error(f"img must be RGB or RGBA but got {img.shape}")
@@ -338,7 +349,7 @@ def upscale_image():
         elapsed=0,
         last_modified=time.time(),
         profiler=profiler,
-    ))
+    ), timeout=3600)
     
     #wait for id is finished
     while True:
@@ -355,6 +366,7 @@ def upscale_image():
             # upscaler_event.wait(timeout=0.5)
             # upscaler_event.clear()
         except TimeoutError:
+            time.sleep(0.01)
             pass
     profiler.end('endpoint.proc')
     
@@ -385,4 +397,4 @@ if __name__ == '__main__':
     app = fl.Flask(__name__)
     app.register_blueprint(blueprint)
     
-    app.run(debug=True, port=8088, use_reloader=False, threaded=True, host='0.0.0.0')
+    app.run(debug=False, port=8088, use_reloader=False, threaded=True, host='0.0.0.0')
