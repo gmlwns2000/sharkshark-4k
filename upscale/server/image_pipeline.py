@@ -68,9 +68,24 @@ def upscale_image():
     profiler.start('endpoint.io.imdecode')
     img = cv2.imdecode(buffer, cv2.IMREAD_COLOR)
     profiler.end('endpoint.io.imdecode')
+    profiler.end('endpoint.io')
+    
+    if img is None:
+        return fl.jsonify({
+            'result':'err', 
+            'err': 'img is none. did you give correct image blob?',
+            'profiler': entry.profiler.data
+        })
+    
+    if img.shape[-1] != 3:
+        return fl.jsonify({
+            'result':'err', 
+            'err': 'img must be RGB, 3 channel',
+            'profiler': entry.profiler.data
+        })
+    
     assert img.shape[-1] == 3
     logger.debug(img.shape)
-    profiler.end('endpoint.io')
     
     profiler.start('endpoint.proc')
     upscaler.push_job(UpscalerQueueEntry(
@@ -117,4 +132,4 @@ if __name__ == '__main__':
     app = fl.Flask(__name__)
     app.register_blueprint(blueprint)
     
-    app.run(debug=True, port=8088, use_reloader=False, threaded=True)
+    app.run(debug=True, port=8088, use_reloader=False, threaded=True, host='0.0.0.0')
