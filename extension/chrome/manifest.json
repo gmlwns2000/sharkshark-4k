@@ -1,0 +1,30 @@
+{
+    "name": "SharkShark4k",
+    "description": "Web Image Super Resolution Tool",
+    "icons": {
+      "128": "images/icon.png"
+    },
+    "permissions": [ 
+      "tabs",
+      "notifications",
+      "downloads", 
+      "activeTab", 
+      "declarativeContent", 
+      "storage"
+    ],
+    "host_permissions": [
+      "*://*/*"
+    ],
+    "background": {
+      "service_worker": "js/ss4_worker.js"
+    },
+    "content_scripts": [
+      {
+        "matches": ["<all_urls>"],
+        "js": ["js/html2canvas.js", "js/ss4.js"]
+      }
+    ],
+    "run_at": "document_start",
+    "manifest_version": 3,
+    "version": "1.0"
+}
