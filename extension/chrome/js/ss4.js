@@ -146,7 +146,13 @@ async function proc_img(img, event) {
             
             if(response && response.status && response.status === 'ok' && response.url) {
                 let new_url = response.url;
-                console.log('proc_img updated url', new_url, response);
+                console.log('proc_img updated url', new_url, response,
+                // (!img.ss4_status || img.ss4_status === 'pending' || (img.old_src && (img.ss4_src !== img.src))),
+                // (!url_ban(source_url)),
+                // source_url, is_elem_visible(img),
+                // ((img.naturalWidth / (img.clientWidth + 0.00001)) < 4.0 || source_url_method !== 'img'),
+                // img.src
+                );
                 let patched = false;
                 switch(source_url_method) {
                     case "img":
@@ -173,12 +179,15 @@ async function proc_img(img, event) {
                     }
                     img.old_src = source_url;
                     img.ss4_src = new_url;
+                    img.onerror = undefined;
+                    img.removeAttribute('onerror')
                     if(!img.width || img.width < 4000) {
                         img.width = img.clientWidth;
                         img.height = img.clientHeight;
                     }
                     img.ss4_status = 'done';
                 } else {
+                    console.log('patched failed because src updated')
                     img.ss4_status = 'pending';
                 }
             } else {
@@ -245,7 +254,7 @@ let initialied = false;
 if(!initialied) {
     initialied = true;
     proc_all();
-    setInterval(proc_all, 500);
+    setInterval(proc_all, 5000);
     window.addEventListener('scroll', proc_all);
     window.addEventListener("click", () => setTimeout(proc_all, 150));
 }
