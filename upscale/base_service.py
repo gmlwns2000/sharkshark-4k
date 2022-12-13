@@ -1,4 +1,5 @@
 import abc, time, os
+import signal
 from queue import Empty, Full
 import traceback
 import torch.multiprocessing as mp
@@ -56,22 +57,40 @@ class BaseService(metaclass=abc.ABCMeta):
                 except Empty:
                     time.sleep(0.001)
 
+            print('BaseService.proc_main: EXIT PATTERN!')
             os.kill(os.getpid(), 15)
         except Exception as ex:
             if self.exit_on_error:
                 traceback.print_exc()
                 print(ex)
-                os.killpg(os.getpgid(os.getpid()), 15)
+                os.killpg(os.getpgid(os.getpid()), signal.SIGINT)
             else:
                 raise ex
 
+    def check_proc(self):
+        # if self.proc is not None:
+        #     raise Exception('process is not started')
+        if not self.proc.is_alive():
+            if self.exit_on_error:
+                try:
+                    raise Exception('process is dead!')
+                except Exception as ex:
+                    traceback.print_exc()
+                    print(ex)
+                    os.killpg(os.getpgid(os.getpid()), signal.SIGINT)
+            else:
+                raise Exception('process is dead!')
+    
     def push_job(self, entry, timeout=10):
+        self.check_proc()
         self.job_queue.put(entry, timeout=timeout)
     
     def push_job_nowait(self, entry):
+        self.check_proc()
         self.job_queue.put_nowait(entry)
 
     def get_result(self, timeout=10):
+        self.check_proc()
         entry = self.result_queue.get(timeout=timeout)
         return entry
 

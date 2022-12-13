@@ -4,7 +4,7 @@ import threading
 from typing import Dict, Tuple
 import PIL
 import flask as fl
-import multiprocessing as mp
+import torch.multiprocessing as mp
 import logging
 import torch, time, cv2
 import numpy as np
@@ -142,6 +142,15 @@ class ReaderWriterObject:
     def end_write(self):
         self.wrt.release()
 
+def human_readable(v, step=1024, unit=['B', 'KB', 'MB', 'GB', 'TB']):
+    assert step > 0
+    
+    idx = 0
+    while v > step:
+        v /= step
+        idx += 1
+    return f'{v:.4f}{unit[min(idx, len(unit)-1)]}'
+
 class MemoryImageCache:
     def __init__(self, cache_size_bytes=1024*1024*1024*4) -> None:
         self.max_size = cache_size_bytes #1020*1024*8
@@ -172,10 +181,13 @@ class MemoryImageCache:
             with item[-1].write():
                 del self.bank.get()[key]
         
-        logger.debug(f'removed {self.size / self.max_size * 100} %')
+        logger.debug(f'removed {self.size / self.max_size * 100: .5f}% ({human_readable(self.size)} in cache)')
     
     def add(self, key, value: io.BytesIO):
-        if self.contains(key): raise Exception('already exists')
+        if self.contains(key):
+            #raise Exception('already exists')
+            logger.debug(f'memcache already exists {key}')
+            return
         
         with self.bank.write():
             self.size += sys.getsizeof(value)
@@ -185,7 +197,7 @@ class MemoryImageCache:
             
             self.bank.get()[key] = (time.time(), ReaderWriterObject(value))
         
-        logger.debug(f'added {self.size / self.max_size * 100} %')
+        logger.debug(f'added {self.size / self.max_size * 100: .5f}% ({human_readable(self.size)} in cache)')
     
     def cloneof(self, key):
         with self.bank.read():
@@ -260,8 +272,13 @@ hitcount = 0
 @blueprint.route('/image', methods=['POST'])
 def upscale_image():
     global count, hitcount
+    
+    pre_scale = 1.0
+    post_scale = 0.66
+    
     count += 1
     profiler = Profiler()
+    profiler.start('endpoint')
     
     profiler.start('endpoint.io.read')
     buffer = fl.request.files['file'].read()
@@ -335,46 +352,71 @@ def upscale_image():
         })
     
     assert img.shape[-1] == 3
-    logger.debug(img.shape)
+    # logger.debug(img.shape)
     
     profiler.start('endpoint.pipeline')
     upscaler = get_pipeline()
     profiler.end('endpoint.pipeline')
     
     profiler.start('endpoint.proc')
-    upscaler.push_job(UpscalerQueueEntry(
-        frames=torch.tensor(img, dtype=torch.uint8, device=upscaler.device).unsqueeze(0),
-        audio_segment=torch.empty((1,)),
-        step=my_id,
-        elapsed=0,
-        last_modified=time.time(),
-        profiler=profiler,
-    ), timeout=3600)
+    if img.shape[0] * img.shape[1] > 1024*1024:
+        pre_scale = 0.8
+        post_scale = 0.85
+    if img.shape[0] * img.shape[1] < 64*32:
+        post_scale = 1.0
+    if img.shape[0] * img.shape[1] > 4096*2048:
+        logger.error(f"img is too big! {img.shape} > (4096x2048)")
+        return fl.jsonify({
+            'result':'err', 
+            'err': f"img is too big! {img.shape} > (4096x2048)",
+            'profiler': profiler.data
+        })
+    
+    if pre_scale < 1.0:
+        img = cv2.resize(img, None, fx=pre_scale, fy=pre_scale, interpolation=cv2.INTER_AREA)
+    
+    try:
+        upscaler.push_job(UpscalerQueueEntry(
+            frames=torch.tensor(img, dtype=torch.uint8, device=upscaler.device).unsqueeze(0),
+            audio_segment=torch.empty((1,)),
+            step=my_id,
+            elapsed=0,
+            last_modified=time.time(),
+            profiler=profiler,
+        ), timeout=10)
+    except (queue.Full, TimeoutError):
+        logger.error('worker is busy? timeout')
+        return fl.jsonify({
+            'result':'err', 
+            'err': f'worker is busy',
+            'profiler': profiler.data
+        })
     
     #wait for id is finished
     while True:
         try:
-            entry = upscaler.get_result() #type: UpscalerQueueEntry
-            logger.debug(f'processed id {entry.step}')
-            if entry.step == my_id:
-                profiler = entry.profiler
-                break
-            else:
-                upscaler.result_queue.put(entry)
-                time.sleep(0.01)
+            with upscaler_lock:
+                entry = upscaler.get_result() #type: UpscalerQueueEntry
+                logger.debug(f'processed id {entry.step}')
+                if entry.step == my_id:
+                    profiler = entry.profiler
+                    break
+                else:
+                    upscaler.result_queue.put(entry)
+                    time.sleep(0.01)
             #     upscaler_event.set()
             # upscaler_event.wait(timeout=0.5)
             # upscaler_event.clear()
-        except TimeoutError:
-            time.sleep(0.01)
-            pass
+        except (queue.Empty, TimeoutError):
+            time.sleep(0.05)
     profiler.end('endpoint.proc')
     
     profiler.start('endpoint.write')
     if(entry.frames.device != 'cpu'):
         entry.frames = entry.frames.cpu()
     frame = entry.frames.squeeze(0).numpy()
-    frame = cv2.resize(frame, None, fx=0.66, fy=0.66, interpolation=cv2.INTER_AREA)
+    if post_scale < 1.0:
+        frame = cv2.resize(frame, None, fx=post_scale, fy=post_scale, interpolation=cv2.INTER_AREA)
     if alpha_map is not None:
         alpha_map = cv2.resize(alpha_map, (frame.shape[1], frame.shape[0]), interpolation=cv2.INTER_LINEAR)
         frame = np.concatenate([frame, alpha_map.reshape((frame.shape[0], frame.shape[1], 1))], axis=-1)
@@ -386,7 +428,8 @@ def upscale_image():
     profiler.end('endpoint.write.file')
     logger.debug(f'{frame.shape} {img_path}')
     profiler.end('endpoint.write')
-    
+
+    profiler.end('endpoint')
     return fl.jsonify({
         'result':'ok', 
         'url':img_path,
