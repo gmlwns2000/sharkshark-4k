@@ -49,7 +49,7 @@ class BaseUpscalerService(BaseService):
         elapsed = time.time() - t
         job.profiler.start('upscaler.output')
         entry = UpscalerQueueEntry(
-            frames=frames_up.clone(), step=job.step, audio_segment=job.audio_segment, 
+            frames=frames_up, step=job.step, audio_segment=job.audio_segment, 
             elapsed=elapsed, last_modified=time.time(), profiler=job.profiler
         )
         return entry

@@ -3,7 +3,6 @@ import sys
 import threading
 from typing import Dict, Tuple
 import PIL
-import flask as fl
 import torch.multiprocessing as mp
 import logging
 import torch, time, cv2
@@ -17,9 +16,14 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 from PIL import GifImagePlugin
 GifImagePlugin.LOADING_STRATEGY = GifImagePlugin.LoadingStrategy.RGB_ALWAYS
 from PIL import Image
+import flask as fl
+
+from upscale.server.cache import DiskImageCache, MemoryImageCache
+logging.basicConfig()
 
 logger = logging.getLogger("ImagePipeline")
 logger.setLevel(logging.DEBUG)
+
 blueprint = fl.Blueprint('upscale', __name__, url_prefix='/upscale')
 
 upscaler_lock = mp.Lock()
@@ -39,7 +43,7 @@ def get_pipeline():
             )
             upscaler.exit_on_error = True
             upscaler.start()
-            logging.info('Upscaler started')
+            logger.info('Upscaler started')
     return upscaler
 
 @blueprint.route('/ping')
@@ -63,185 +67,8 @@ def upload_file(filename:str):
     
     return fl.send_file(buffer, download_name=filename)
 
-class ImageCache:
-    def has_file(self, filename:str):
-        pass
-    
-    def read_file(self, filename:str):
-        pass
-    
-    def write_file(self, filename:str, buffer:io.BytesIO):
-        pass
-
-class DiskImageCache(ImageCache):
-    def has_file(self, filename):
-        if os.path.exists(f'./cache/{filename}'):
-            return f'/upscale/file/{filename}'
-        else:
-            return None
-    
-    def read_file(self, filename):
-        file_path = f'./cache/{filename}'
-        if os.path.exists(file_path):
-            with open(f'./cache/{filename}', 'rb') as f:
-                return io.BytesIO(f.read())
-        else:
-            return None
-    
-    def write_file(self, filename, buffer):
-        os.makedirs('./cache', exist_ok=True)
-        file_path = f'./cache/{filename}'
-        with open(file_path, 'wb') as f:
-            f.write(buffer)
-
-class WithWrapper:
-    def __init__(self, enter, exit) -> None:
-        self.enter = enter
-        self.exit = exit
-    
-    def __enter__(self):
-        self.enter()
- 
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.exit()
-
-class ReaderWriterObject:
-    def __init__(self, object) -> None:
-        self.object = object
-        self.mutex = threading.RLock()
-        self.wrt = threading.RLock()
-        self.nreader = 0
-    
-    def get(self): return self.object
-    def set(self, v): self.object = v
-    
-    def read(self):
-        return WithWrapper(self.start_read, self.end_read)
-    
-    def start_read(self):
-        self.mutex.acquire()
-        self.nreader += 1
-        if (self.nreader == 1):
-            self.wrt.acquire()
-        self.mutex.release()
-        
-    def end_read(self):
-        self.mutex.acquire()
-        self.nreader -= 1
-        assert self.nreader >= 0
-        if (self.nreader == 0):
-            self.wrt.release()
-        self.mutex.release()
-    
-    def write(self):
-        return WithWrapper(self.start_write, self.end_write)
-    
-    def start_write(self):
-        self.wrt.acquire()
-    
-    def end_write(self):
-        self.wrt.release()
-
-def human_readable(v, step=1024, unit=['B', 'KB', 'MB', 'GB', 'TB']):
-    assert step > 0
-    
-    idx = 0
-    while v > step:
-        v /= step
-        idx += 1
-    return f'{v:.4f}{unit[min(idx, len(unit)-1)]}'
-
-class MemoryImageCache:
-    def __init__(self, cache_size_bytes=1024*1024*1024*4) -> None:
-        self.max_size = cache_size_bytes #1020*1024*8
-        self.size = 0
-        self._bank: Dict[str, Tuple[float, ReaderWriterObject]] = {} #filename -> (last_tick, mutex, wrt, num_readers, io.BytesIO)
-        self.bank = ReaderWriterObject(self._bank)
-    
-    def contains(self, key):
-        with self.bank.read():
-            has_key = key in self.bank.get()
-            # logger.debug(f'contains {key} {has_key}')
-            return has_key
-    
-    def sizeof(self, key):
-        with self.bank.read():
-            if not self.contains(key): return 0
-            item = self.bank.get()[key][-1] #type: ReaderWriterObject
-            with item.read():
-                buffer = item.get() #type: io.BytesIO
-                return sys.getsizeof(buffer)
-    
-    def remove(self, key):
-        if not self.contains(key): return
-        with self.bank.write():
-            size = self.sizeof(key)
-            self.size -= size
-            item = self.bank.get()[key]
-            with item[-1].write():
-                del self.bank.get()[key]
-        
-        logger.debug(f'removed {self.size / self.max_size * 100: .5f}% ({human_readable(self.size)} in cache)')
-    
-    def add(self, key, value: io.BytesIO):
-        if self.contains(key):
-            #raise Exception('already exists')
-            logger.debug(f'memcache already exists {key}')
-            return
-        
-        with self.bank.write():
-            self.size += sys.getsizeof(value)
-            if self.size > self.max_size:
-                logger.debug(f'need to evict {self.size} {self.max_size}')
-                self.evict(self.size - self.max_size)
-            
-            self.bank.get()[key] = (time.time(), ReaderWriterObject(value))
-        
-        logger.debug(f'added {self.size / self.max_size * 100: .5f}% ({human_readable(self.size)} in cache)')
-    
-    def cloneof(self, key):
-        with self.bank.read():
-            if not self.contains(key): raise Exception('not found')
-            item = self.bank.get()[key]
-            with item[-1].read():
-                self.bank.get()[key] = (time.time(), item[-1])
-                buffer = item[-1].get() #type: io.BytesIO
-                return io.BytesIO(buffer.getvalue())
-    
-    def evict(self, to_bytes):
-        #threadsafe here
-        logger.debug(f'need to evict {to_bytes} bytes')
-        while to_bytes > 0 and len(self.bank.get()) > 0:
-            minval = 987654312340
-            minidx = None
-            for key, value in self.bank.get().items():
-                if value[0] < minval:
-                    minval = value[0]
-                    minidx = key
-            if minidx is not None:
-                size = self.sizeof(minidx)
-                to_bytes -= size
-                logger.debug(f'evict {size} bytes')
-                self.remove(minidx)
-            else:
-                return
-    
-    # interfaces
-    def has_file(self, filename:str):
-        if self.contains(filename):
-            return f'/upscale/file/{filename}'
-        else: return None
-    
-    def read_file(self, filename:str):
-        if self.contains(filename):
-            return self.cloneof(filename)
-        else:
-            return None
-    
-    def write_file(self, filename:str, buffer:io.BytesIO):
-        self.add(filename, buffer)
-
 image_cache = MemoryImageCache()
+# image_cache = DiskImageCache()
 
 def has_file(filename):
     return image_cache.has_file(filename)
@@ -268,6 +95,26 @@ def write_file(filename, img, profiler: Profiler):
 
 count = 0
 hitcount = 0
+
+def upscaler_queue_handler():
+    pipeline = get_pipeline()
+    while True:
+        entry = pipeline.result_queue.get() #type: UpscalerQueueEntry
+        if entry.step in upscaler_queue_semas:
+            sema = upscaler_queue_semas[entry.step] #type: threading.Semaphore
+            if sema is not None:
+                entry.frames = entry.frames.to('cpu', non_blocking=True)
+                upscaler_queue_entries[entry.step] = entry
+                sema.release()
+        else:
+            raise Exception('should not happen')
+
+upscaler_queue_semas = {}
+upscaler_queue_entries = {}
+upscaler_queue_thread = None
+if upscaler_queue_thread == None:
+    upscaler_queue_thread = threading.Thread(target=upscaler_queue_handler, daemon=True)
+    upscaler_queue_thread.start()
 
 @blueprint.route('/image', methods=['POST'])
 def upscale_image():
@@ -375,40 +222,45 @@ def upscale_image():
     if pre_scale < 1.0:
         img = cv2.resize(img, None, fx=pre_scale, fy=pre_scale, interpolation=cv2.INTER_AREA)
     
+    my_sema = threading.Semaphore(0)
+    upscaler_queue_semas[my_id] = my_sema
+    
     try:
         upscaler.push_job(UpscalerQueueEntry(
-            frames=torch.tensor(img, dtype=torch.uint8, device=upscaler.device).unsqueeze(0),
-            audio_segment=torch.empty((1,)),
+            frames=torch.tensor(img, dtype=torch.uint8, device=upscaler.device).unsqueeze(0).clone(),
+            audio_segment=None,
             step=my_id,
             elapsed=0,
             last_modified=time.time(),
             profiler=profiler,
         ), timeout=10)
     except (queue.Full, TimeoutError):
-        logger.error('worker is busy? timeout')
+        logger.error('worker is busy? push timeout')
         return fl.jsonify({
             'result':'err', 
             'err': f'worker is busy',
             'profiler': profiler.data
         })
     
-    #wait for id is finished
-    while True:
-        try:
-            with upscaler_lock:
-                entry = upscaler.get_result() #type: UpscalerQueueEntry
-                logger.debug(f'processed id {entry.step}')
-                if entry.step == my_id:
-                    profiler = entry.profiler
-                    break
-                else:
-                    upscaler.result_queue.put(entry)
-                    time.sleep(0.01)
-            #     upscaler_event.set()
-            # upscaler_event.wait(timeout=0.5)
-            # upscaler_event.clear()
-        except (queue.Empty, TimeoutError):
-            time.sleep(0.05)
+    try:
+        my_sema.acquire(timeout=10)
+    except TimeoutError:
+        upscaler_queue_semas[my_id] = None
+        upscaler_queue_entries[my_id] = None
+        
+        logger.error('worker is busy? wait timeout')
+        return fl.jsonify({
+            'result':'err', 
+            'err': f'worker is busy',
+            'profiler': profiler.data
+        })
+    upscaler_queue_semas[my_id] = None
+    
+    entry = upscaler_queue_entries[my_id] #type: UpscalerQueueEntry
+    upscaler_queue_entries[my_id] = None
+    
+    assert entry.step == my_id
+    profiler = entry.profiler
     profiler.end('endpoint.proc')
     
     profiler.start('endpoint.write')
@@ -436,8 +288,8 @@ def upscale_image():
         'profiler': entry.profiler.data
     })
 
+app = fl.Flask(__name__)
+app.register_blueprint(blueprint)
+
 if __name__ == '__main__':
-    app = fl.Flask(__name__)
-    app.register_blueprint(blueprint)
-    
     app.run(debug=False, port=8088, use_reloader=False, threaded=True, host='0.0.0.0')
