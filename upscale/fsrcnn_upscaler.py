@@ -6,6 +6,7 @@ from upscale.model.fsrcnn.factory import build_model as build_model_fsrcnn
 from upscale.model.realesrgan.factory import build_model as build_model_esrgan
 from upscale.model.bsvd.factory import build_model as build_denoise_model
 from util.profiler import Profiler
+import torch.nn.functional as F
 import gc
 
 torch.hub._validate_not_a_forked_repo=lambda a,b,c: True
@@ -134,6 +135,7 @@ class FsrcnnUpscalerService(BaseUpscalerService):
             self.denoise_blur = blur_ker().half().to(self.device)
             self.denoise_sharpen = sharpen_ker(strength=0.00002).half().to(self.device)
             self.denoise_sharpen_hr = sharpen_ker(strength=0.00007).half().to(self.device)
+        self.match_blur = blur_ker(kernel_size=8*2+1, sigma=8.0).half().to(self.device)
         log('model loaded')
     
     def proc_cleanup(self):
@@ -184,6 +186,7 @@ class FsrcnnUpscalerService(BaseUpscalerService):
             self.profiler.end('fsrcnn.model')
         
         with torch.no_grad(), torch.cuda.amp.autocast():
+            # channel distribution match
             N, C, H, W = hr_curr.shape
             hr_curr = hr_curr.view(N, C, H, W)
             hr_curr_mean = hr_curr.view(N, C, H*W).mean(dim=-1).view(N, C, 1, 1)
@@ -194,8 +197,29 @@ class FsrcnnUpscalerService(BaseUpscalerService):
             hr_curr = (hr_curr - hr_curr_mean) / (hr_curr_std + 1e-8)
             hr_curr = hr_curr * img_std + img_mean
             hr_curr = hr_curr.view(N, C, H, W)
+        
+        with torch.no_grad(), torch.cuda.amp.autocast():
+            # match local color
+            MATCH_FACTOR = 8
+            if (H//MATCH_FACTOR) > (self.match_blur.weight.shape[-1]//2) and H > 64 and W > 64:
+                lr_blur = F.interpolate(
+                    lr_curr_before, size=(H//MATCH_FACTOR, W//MATCH_FACTOR), mode='area'
+                )
+                hr_blur = F.interpolate(
+                    hr_curr, size=(H//MATCH_FACTOR, W//MATCH_FACTOR), mode='area'
+                )
+                assert lr_blur.shape == hr_blur.shape
+                lr_blur = self.match_blur(lr_blur.view(N*C, 1, H//MATCH_FACTOR, W//MATCH_FACTOR)).view(N, C, H//MATCH_FACTOR, W//MATCH_FACTOR)
+                hr_blur = self.match_blur(hr_blur.view(N*C, 1, H//MATCH_FACTOR, W//MATCH_FACTOR)).view(N, C, H//MATCH_FACTOR, W//MATCH_FACTOR)
+                diff_blur = hr_blur - lr_blur
+                diff_blur = F.interpolate(
+                    diff_blur, size=(H, W), mode='bilinear'
+                )
+                hr_curr = hr_curr - diff_blur
             
             _hr_curr = torch.clamp(hr_curr, 0, 1)
+        
+        with torch.no_grad(), torch.cuda.amp.autocast():
             if (self.output_shape is not None) and self.lr_hr_resize:
                 if self.output_shape[0] >= _hr_curr.shape[0]:
                     _hr_curr = torch.nn.functional.interpolate(

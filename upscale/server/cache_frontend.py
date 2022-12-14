@@ -92,7 +92,12 @@ async def download_file(filename: str):
     global image_cache
     buffer = await image_cache.read_file(filename)
     if buffer is not None:
-        return Response(content=buffer, media_type="image/png")
+        return Response(
+            content=buffer, media_type="image/png", 
+            headers={
+                'Access-Control-Allow-Origin': '*'
+            }
+        )
     else:
         return HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
