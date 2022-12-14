@@ -1,3 +1,4 @@
+import gc
 import os, io
 import sys
 import threading
@@ -7,6 +8,7 @@ import torch.multiprocessing as mp
 import logging
 import torch, time, cv2
 import numpy as np
+from upscale.base_service import ProcessDeadException
 from upscale.fsrcnn_upscaler import FsrcnnUpscalerService, UpscalerQueueEntry
 from util.profiler import Profiler
 import queue
@@ -18,7 +20,7 @@ GifImagePlugin.LOADING_STRATEGY = GifImagePlugin.LoadingStrategy.RGB_ALWAYS
 from PIL import Image
 import flask as fl
 
-from upscale.server.cache import DiskImageCache, MemoryImageCache
+from upscale.server.stateful_cache import DiskImageCache, MemoryImageCache
 logging.basicConfig()
 
 logger = logging.getLogger("ImagePipeline")
@@ -26,25 +28,49 @@ logger.setLevel(logging.DEBUG)
 
 blueprint = fl.Blueprint('upscale', __name__, url_prefix='/upscale')
 
-upscaler_lock = mp.Lock()
-upscaler = None
+upscaler_lock = mp.RLock()
+upscaler: FsrcnnUpscalerService = None
 upscaler_event = mp.Event()
 
 def get_bytes_hash(buffer):
     return hashlib.sha1(buffer).hexdigest()
 
+def pipeline_onqueue(entry:UpscalerQueueEntry):
+    global upscaler
+    upscaler.result_queue.put(UpscalerQueueEntry(
+        frames=entry.frames.clone(),
+        audio_segment=None,
+        step=entry.step,
+        elapsed=entry.elapsed,
+        last_modified=entry.last_modified,
+        profiler=entry.profiler
+    ))
+
 def get_pipeline():
+    global upscaler
+    start_pipeline()
+    return upscaler
+
+def start_pipeline():
     global upscaler
     with upscaler_lock:
         if upscaler is None:
             upscaler = FsrcnnUpscalerService(
-                lr_level=3, device=0, denoising=False, denoise_rate=0.2, 
+                lr_level=3, device=0, denoising=False, denoise_rate=0.2, on_queue=pipeline_onqueue,
                 upscaler_model='realesrgan', batch_size=1, jit_mode=False, lr_hr_resize=False
             )
             upscaler.exit_on_error = True
             upscaler.start()
             logger.info('Upscaler started')
-    return upscaler
+
+def restart_pipeline():
+    global upscaler
+    with upscaler_lock:
+        if upscaler is not None:
+            assert not upscaler.proc.is_alive()
+            upscaler = None
+            
+        start_pipeline()
 
 @blueprint.route('/ping')
 def ping():
@@ -76,17 +102,7 @@ def has_file(filename):
 def read_file(filename):
     return image_cache.read_file(filename)
 
-def write_file(filename, img, profiler: Profiler):
-    logger.debug(f'write_file: {filename}, img:{img.shape}, {img.dtype}')
-    profiler.start('write_file.imsave')
-    buffer = io.BytesIO()
-    if img.shape[-1] == 4:
-        Image.fromarray(img).save(buffer, format='PNG', optimize=False)
-    else:
-        Image.fromarray(img).save(buffer, format='JPEG', progressive=True, quality=85, optimize=True)
-    buffer.seek(0)
-    profiler.end('write_file.imsave')
-    
+def write_file(filename, buffer, profiler: Profiler):
     profiler.start('write_file.cache')
     image_cache.write_file(filename, buffer)
     profiler.end('write_file.cache')
@@ -104,6 +120,8 @@ def upscaler_queue_handler():
             sema = upscaler_queue_semas[entry.step] #type: threading.Semaphore
             if sema is not None:
                 entry.frames = entry.frames.to('cpu', non_blocking=True)
+                # gc.collect(generation=0)
+                # torch.cuda.empty_cache()
                 upscaler_queue_entries[entry.step] = entry
                 sema.release()
         else:
@@ -116,6 +134,8 @@ if upscaler_queue_thread == None:
     upscaler_queue_thread = threading.Thread(target=upscaler_queue_handler, daemon=True)
     upscaler_queue_thread.start()
 
+USE_CACHE = False
+
 @blueprint.route('/image', methods=['POST'])
 def upscale_image():
     global count, hitcount
@@ -127,6 +147,17 @@ def upscale_image():
     profiler = Profiler()
     profiler.start('endpoint')
     
+    return_type = 'url'
+    params = fl.request.args.to_dict()
+    if 'return_type' in params:
+        if params['return_type'] in ['url', 'file']:
+            return_type = params['return_type']
+        else:
+            return fl.jsonify({
+                'result':'err',
+                'err': f'unknown return type {params["return_type"]}'
+            }), 500
+    
     profiler.start('endpoint.io.read')
     buffer = fl.request.files['file'].read()
     profiler.end('endpoint.io.read')
@@ -135,16 +166,29 @@ def upscale_image():
     profiler.end('endpoint.io.hash')
     filename = my_id + '.png'
     
-    cache_path = has_file(filename)
-    if cache_path is not None:
-        hitcount += 1
-        logger.debug(f"return cached {filename} in {cache_path}, hitratio: {hitcount/count*100:.5f}%")
-        return fl.jsonify({
-            'result':'ok', 
-            'cache': 'hit',
-            'url':cache_path,
-            'profiler': profiler.data
-        })
+    if USE_CACHE:
+        cache_path = has_file(filename)
+        if cache_path is not None:
+            logger.debug(f"return cached {filename} in {cache_path}")
+            if return_type == 'url':
+                return fl.jsonify({
+                    'result':'ok',
+                    'cache': 'hit',
+                    'url':cache_path,
+                    'profiler': profiler.data
+                }), 200
+            elif return_type == 'file':
+                buffer = read_file(filename)
+                if buffer is not None:
+                    return fl.send_file(buffer, download_name=filename)
+                else:
+                    return fl.jsonify({
+                        'result':'err',
+                        'cache': 'miss',
+                        'err': 'cache was hit but cleared before read all bytes'
+                    }), 500
+            else:
+                raise Exception()
     
     profiler.start('endpoint.io.imdecode')
     buffer = io.BytesIO(buffer)
@@ -169,7 +213,7 @@ def upscale_image():
             'result':'err', 
             'err': 'img is none. did you give correct image blob?',
             'profiler': profiler.data
-        })
+        }), 500
     
     is_mono = False
     if len(img.shape) == 2:
@@ -182,7 +226,7 @@ def upscale_image():
             'result':'err', 
             'err': f'img must be 3D but got {img.shape}',
             'profiler': profiler.data
-        })
+        }), 500
     
     alpha_map = None
     if img.shape[-1] == 4:
@@ -196,7 +240,7 @@ def upscale_image():
             'result':'err', 
             'err': f'img must be RGB or RGBA but got {img.shape}',
             'profiler': profiler.data
-        })
+        }), 500
     
     assert img.shape[-1] == 3
     # logger.debug(img.shape)
@@ -217,7 +261,7 @@ def upscale_image():
             'result':'err', 
             'err': f"img is too big! {img.shape} > (4096x2048)",
             'profiler': profiler.data
-        })
+        }), 500
     
     if pre_scale < 1.0:
         img = cv2.resize(img, None, fx=pre_scale, fy=pre_scale, interpolation=cv2.INTER_AREA)
@@ -233,17 +277,24 @@ def upscale_image():
             elapsed=0,
             last_modified=time.time(),
             profiler=profiler,
-        ), timeout=10)
+        ), timeout=20)
     except (queue.Full, TimeoutError):
         logger.error('worker is busy? push timeout')
         return fl.jsonify({
             'result':'err', 
             'err': f'worker is busy',
             'profiler': profiler.data
-        })
+        }), 500
+    except ProcessDeadException as ex:
+        restart_pipeline()
+        return fl.jsonify({
+            'result':'err', 
+            'err': f'worker is dead',
+            'profiler': profiler.data
+        }), 500
     
     try:
-        my_sema.acquire(timeout=10)
+        my_sema.acquire(timeout=20)
     except TimeoutError:
         upscaler_queue_semas[my_id] = None
         upscaler_queue_entries[my_id] = None
@@ -253,11 +304,27 @@ def upscale_image():
             'result':'err', 
             'err': f'worker is busy',
             'profiler': profiler.data
-        })
+        }), 500
     upscaler_queue_semas[my_id] = None
     
-    entry = upscaler_queue_entries[my_id] #type: UpscalerQueueEntry
+    if my_id in upscaler_queue_entries:
+        entry = upscaler_queue_entries[my_id] #type: UpscalerQueueEntry
+    else:
+        logger.error('queue may interrupted. entry')
+        return fl.jsonify({
+            'result':'err', 
+            'err': f'queue may interrupted. entry',
+            'profiler': profiler.data
+        }), 500
     upscaler_queue_entries[my_id] = None
+    
+    if entry is None:
+        logger.error('queue may interrupted')
+        return fl.jsonify({
+            'result':'err', 
+            'err': f'queue may interrupted',
+            'profiler': profiler.data
+        }), 500
     
     assert entry.step == my_id
     profiler = entry.profiler
@@ -276,17 +343,37 @@ def upscale_image():
         #TODO: handle mono image correctly...
         frame = frame
     profiler.start('endpoint.write.file')
-    img_path = write_file(my_id+'.png', frame, profiler)
+    
+    logger.debug(f'write_file: {filename}, img:{frame.shape}, {frame.dtype}')
+    profiler.start('write_file.imsave')
+    out_buffer = io.BytesIO()
+    if frame.shape[-1] == 4:
+        Image.fromarray(frame).save(out_buffer, format='PNG', optimize=False)
+    else:
+        Image.fromarray(frame).save(out_buffer, format='JPEG', progressive=True, quality=85, optimize=True)
+    out_buffer.seek(0)
+    profiler.end('write_file.imsave')
+    
+    if USE_CACHE:
+        img_path = write_file(my_id+'.png', out_buffer, profiler)
+        logger.debug(f'{frame.shape} {img_path}')
     profiler.end('endpoint.write.file')
-    logger.debug(f'{frame.shape} {img_path}')
     profiler.end('endpoint.write')
 
     profiler.end('endpoint')
-    return fl.jsonify({
-        'result':'ok', 
-        'url':img_path,
-        'profiler': entry.profiler.data
-    })
+    if return_type == 'url':
+        assert USE_CACHE
+        
+        return fl.jsonify({
+            'result':'ok', 
+            'url':img_path,
+            'profiler': entry.profiler.data
+        }), 200
+    elif return_type == 'file':
+        out_buffer.seek(0)
+        return fl.send_file(out_buffer, download_name=filename)
+    else:
+        raise Exception()
 
 app = fl.Flask(__name__)
 app.register_blueprint(blueprint)

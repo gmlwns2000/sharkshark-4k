@@ -6,6 +6,7 @@ from upscale.model.fsrcnn.factory import build_model as build_model_fsrcnn
 from upscale.model.realesrgan.factory import build_model as build_model_esrgan
 from upscale.model.bsvd.factory import build_model as build_denoise_model
 from util.profiler import Profiler
+import gc
 
 torch.hub._validate_not_a_forked_repo=lambda a,b,c: True
 torch.backends.cudnn.benchmark = True
@@ -140,6 +141,11 @@ class FsrcnnUpscalerService(BaseUpscalerService):
     
     def upscale(self, frames: torch.Tensor):
         assert isinstance(frames, torch.Tensor)
+        
+        # torch.cuda.synchronize()
+        # gc.collect(generation=0)
+        # torch.cuda.empty_cache()
+        
         if frames.device != self.device:
             frames = frames.to(self.device, non_blocking=True)
         if frames.ndim == 4:
@@ -153,7 +159,6 @@ class FsrcnnUpscalerService(BaseUpscalerService):
                 hrs = torch.stack(hrs, dim=0).detach()
             else:
                 hrs = self.upscale_multi(frames)
-            torch.cuda.synchronize()
             return hrs
         else: 
             raise Exception(frames.shape)

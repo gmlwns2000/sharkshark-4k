@@ -9,21 +9,13 @@ from typing import Dict, Tuple
 from util import human_readable
 import filelock
 
-logger = logging.getLogger("ImageCache")
+from upscale.server.image_cache import *
+
+logger = logging.getLogger("StatefulImageCache")
 logger.setLevel(logging.DEBUG)
 
-class ImageCache:
-    def has_file(self, filename:str):
-        pass
-    
-    def read_file(self, filename:str):
-        pass
-    
-    def write_file(self, filename:str, buffer:io.BytesIO):
-        pass
-
 class DiskImageCache(ImageCache):
-    def __init__(self, max_size=1024*1024*8) -> None:
+    def __init__(self, max_size=1024*1024*1024*2) -> None:
         super().__init__()
         self.root = './cache'
         os.makedirs(self.root, exist_ok=True)
@@ -144,57 +136,9 @@ class DiskImageCache(ImageCache):
                 logger.debug(f'writed {filename} cache {self.size/self.max_size*100:.2f}% ({human_readable(self.size)})')
                 f.write(buffer)
                 self.lru_table.get()[filename] = time.time()
-
-class WithWrapper:
-    def __init__(self, enter, exit) -> None:
-        self.enter = enter
-        self.exit = exit
-    
-    def __enter__(self):
-        self.enter()
- 
-    def __exit__(self, exc_type, exc_value, traceback):
-        self.exit()
-
-class ReaderWriterObject:
-    def __init__(self, object) -> None:
-        self.object = object
-        self.mutex = threading.RLock()
-        self.wrt = threading.RLock()
-        self.nreader = 0
-    
-    def get(self): return self.object
-    def set(self, v): self.object = v
-    
-    def read(self):
-        return WithWrapper(self.start_read, self.end_read)
-    
-    def start_read(self):
-        self.mutex.acquire()
-        self.nreader += 1
-        if (self.nreader == 1):
-            self.wrt.acquire()
-        self.mutex.release()
-        
-    def end_read(self):
-        self.mutex.acquire()
-        self.nreader -= 1
-        assert self.nreader >= 0
-        if (self.nreader == 0):
-            self.wrt.release()
-        self.mutex.release()
-    
-    def write(self):
-        return WithWrapper(self.start_write, self.end_write)
-    
-    def start_write(self):
-        self.wrt.acquire()
-    
-    def end_write(self):
-        self.wrt.release()
         
 class MemoryImageCache:
-    def __init__(self, cache_size_bytes=1024*1024*1024*8) -> None:
+    def __init__(self, cache_size_bytes=1024*1024*1024*2) -> None:
         self.max_size = cache_size_bytes #1020*1024*8
         self.size = 0
         self._bank: Dict[str, Tuple[float, ReaderWriterObject]] = {} #filename -> (last_tick, mutex, wrt, num_readers, io.BytesIO)

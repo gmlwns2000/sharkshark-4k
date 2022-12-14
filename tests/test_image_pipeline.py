@@ -1,3 +1,4 @@
+import random
 import tqdm
 import os, sys, requests, logging
 import time
@@ -7,11 +8,13 @@ from multiprocessing import Pool
 logger = logging.getLogger("Test.ImagePipeline")
 
 IMNET_PATH = '/d1/dataset/ILSVRC2012'
-TARGET_SERVER = 'https://ainl.tk'
+TARGET_SERVER = 'http://127.0.0.1:8088'
 
 TEST_REQUEST_FILE = True
 
 def test_file(file):
+    if random.random() > 0.5:
+        time.sleep(0.001)
     cache = err = ok = 0
     with open(file, 'rb') as f:
         res = requests.request(
@@ -19,10 +22,11 @@ def test_file(file):
         )
         if res.status_code == 200:
             data = res.json()
-            if data['result'] == 'ok':
+            if 'result' in data and data['result'] == 'ok':
                 if 'cache' in data:
                     cache = 1
                 if TEST_REQUEST_FILE:
+                    # print(data['url'])
                     res = requests.request('GET', url=f'{TARGET_SERVER}{data["url"]}')
                     if res.status_code == 200:
                         try:
@@ -74,7 +78,9 @@ def test_files(files):
 def test_long(files):
     results = []
     for i in range(5):
-        results.append(test_files(files))
+        r = test_files(files)
+        print(r)
+        results.append(r)
     print(results)
 
 if __name__ == '__main__':

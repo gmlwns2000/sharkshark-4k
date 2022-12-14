@@ -4,6 +4,8 @@ from queue import Empty, Full
 import traceback
 import torch.multiprocessing as mp
 
+class ProcessDeadException(Exception):
+    pass
 
 class BaseService(metaclass=abc.ABCMeta):
     on_queue = None
@@ -73,20 +75,20 @@ class BaseService(metaclass=abc.ABCMeta):
         if not self.proc.is_alive():
             if self.exit_on_error:
                 try:
-                    raise Exception('process is dead!')
+                    raise ProcessDeadException('process is dead!')
                 except Exception as ex:
                     traceback.print_exc()
                     print(ex)
                     os.killpg(os.getpgid(os.getpid()), signal.SIGINT)
             else:
-                raise Exception('process is dead!')
+                raise ProcessDeadException('process is dead!')
     
     def push_job(self, entry, timeout=10):
-        self.check_proc()
+        # self.check_proc()
         self.job_queue.put(entry, timeout=timeout)
     
     def push_job_nowait(self, entry):
-        self.check_proc()
+        # self.check_proc()
         self.job_queue.put_nowait(entry)
 
     def get_result(self, timeout=10):
