@@ -113,20 +113,25 @@ count = 0
 hitcount = 0
 
 def upscaler_queue_handler():
+    global upscaler_queue_lock, upscaler_queue_semas, upscaler_queue_entries
     pipeline = get_pipeline()
     while True:
         entry = pipeline.result_queue.get() #type: UpscalerQueueEntry
-        if entry.step in upscaler_queue_semas:
-            sema = upscaler_queue_semas[entry.step] #type: threading.Semaphore
-            if sema is not None:
-                entry.frames = entry.frames.to('cpu', non_blocking=True)
-                # gc.collect(generation=0)
-                # torch.cuda.empty_cache()
-                upscaler_queue_entries[entry.step] = entry
-                sema.release()
+        sema = None
+        with upscaler_queue_lock:
+            if entry.step in upscaler_queue_semas:
+                sema = upscaler_queue_semas[entry.step] #type: threading.Semaphore
+                if sema is not None:
+                    entry.frames = entry.frames.to('cpu', non_blocking=True)
+                    # gc.collect(generation=0)
+                    # torch.cuda.empty_cache()
+                    upscaler_queue_entries[entry.step] = entry
+        if sema is not None:
+            sema.release()
         else:
             raise Exception('should not happen')
 
+upscaler_queue_lock = threading.RLock()
 upscaler_queue_semas = {}
 upscaler_queue_entries = {}
 upscaler_queue_thread = None
@@ -138,6 +143,7 @@ USE_CACHE = False
 
 @blueprint.route('/image', methods=['POST'])
 def upscale_image():
+    global upscaler_queue_lock, upscaler_queue_semas, upscaler_queue_entries
     global count, hitcount
     
     pre_scale = 1.0
@@ -267,7 +273,8 @@ def upscale_image():
         img = cv2.resize(img, None, fx=pre_scale, fy=pre_scale, interpolation=cv2.INTER_AREA)
     
     my_sema = threading.Semaphore(0)
-    upscaler_queue_semas[my_id] = my_sema
+    with upscaler_queue_lock:
+        upscaler_queue_semas[my_id] = my_sema
     
     try:
         upscaler.push_job(UpscalerQueueEntry(
@@ -296,8 +303,9 @@ def upscale_image():
     try:
         my_sema.acquire(timeout=20)
     except TimeoutError:
-        upscaler_queue_semas[my_id] = None
-        upscaler_queue_entries[my_id] = None
+        with upscaler_queue_lock:
+            upscaler_queue_semas[my_id] = None
+            upscaler_queue_entries[my_id] = None
         
         logger.error('worker is busy? wait timeout')
         return fl.jsonify({
@@ -305,18 +313,20 @@ def upscale_image():
             'err': f'worker is busy',
             'profiler': profiler.data
         }), 500
-    upscaler_queue_semas[my_id] = None
-    
-    if my_id in upscaler_queue_entries:
-        entry = upscaler_queue_entries[my_id] #type: UpscalerQueueEntry
-    else:
-        logger.error('queue may interrupted. entry')
-        return fl.jsonify({
-            'result':'err', 
-            'err': f'queue may interrupted. entry',
-            'profiler': profiler.data
-        }), 500
-    upscaler_queue_entries[my_id] = None
+        
+    with upscaler_queue_lock:
+        upscaler_queue_semas[my_id] = None
+        
+        if my_id in upscaler_queue_entries:
+            entry = upscaler_queue_entries[my_id] #type: UpscalerQueueEntry
+        else:
+            logger.error('queue may interrupted. entry')
+            return fl.jsonify({
+                'result':'err', 
+                'err': f'queue may interrupted. entry',
+                'profiler': profiler.data
+            }), 500
+        upscaler_queue_entries[my_id] = None
     
     if entry is None:
         logger.error('queue may interrupted')
