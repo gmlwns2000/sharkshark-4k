@@ -38,7 +38,7 @@ def get_bytes_hash(buffer):
 def pipeline_onqueue(entry:UpscalerQueueEntry):
     global upscaler
     upscaler.result_queue.put(UpscalerQueueEntry(
-        frames=entry.frames.clone(),
+        frames=entry.frames.cpu().clone(),
         audio_segment=None,
         step=entry.step,
         elapsed=entry.elapsed,
@@ -278,7 +278,7 @@ def upscale_image():
     
     try:
         upscaler.push_job(UpscalerQueueEntry(
-            frames=torch.tensor(img, dtype=torch.uint8, device=upscaler.device).unsqueeze(0).clone(),
+            frames=torch.tensor(img, dtype=torch.uint8, device=upscaler.device).unsqueeze(0),
             audio_segment=None,
             step=my_id,
             elapsed=0,

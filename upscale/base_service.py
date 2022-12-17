@@ -84,11 +84,11 @@ class BaseService(metaclass=abc.ABCMeta):
                 raise ProcessDeadException('process is dead!')
     
     def push_job(self, entry, timeout=10):
-        # self.check_proc()
+        self.check_proc()
         self.job_queue.put(entry, timeout=timeout)
     
     def push_job_nowait(self, entry):
-        # self.check_proc()
+        self.check_proc()
         self.job_queue.put_nowait(entry)
 
     def get_result(self, timeout=10):
