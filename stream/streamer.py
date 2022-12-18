@@ -134,7 +134,7 @@ class TwitchStreamer(BaseService):
                 frame = cv2.putText(frame, 
                     f"[SHKSHK-AinL] Processed: {self.frame_count} frames {job.step * len(frames_to_send) - self.frame_count + i} "+\
                     f"skipped ({(job.step * len(frames_to_send) - self.frame_count + i)/(self.frame_count+1e-8)*100:.1f}%)", 
-                    (10, 40), cv2.FONT_HERSHEY_PLAIN, 2.0, (0,255,0), 2
+                    (10, 32), cv2.FONT_HERSHEY_PLAIN, 1.0, (0,255,0), 2
                 )
             job.profiler.end('streamer.send.queue.txt')
             job.profiler.start('streamer.send.queue.video')

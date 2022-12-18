@@ -97,7 +97,7 @@ class TwitchRecoder:
                 # print(f'grabbed {self.frame_count}, {frame[0,0,0]}')
                 if self.output_shape is not None:
                     frame = cv2.resize(frame, dsize=[self.output_shape[1], self.output_shape[0]], interpolation=cv2.INTER_AREA)
-                    frame = cv2.putText(frame, f"Received: {self.frame_count} frames", (10, 64), cv2.FONT_HERSHEY_PLAIN, 1, (255,0,0), 1)
+                    frame = cv2.putText(frame, f"Received: {self.frame_count} frames", (10, 32), cv2.FONT_HERSHEY_PLAIN, 0.5, (255,0,0), 1)
                     self.frame_count += 1
                 frames.append(frame)
             

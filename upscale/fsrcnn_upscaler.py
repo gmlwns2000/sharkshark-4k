@@ -209,8 +209,8 @@ class FsrcnnUpscalerService(BaseUpscalerService):
                     hr_curr, size=(H//MATCH_FACTOR, W//MATCH_FACTOR), mode='area'
                 )
                 assert lr_blur.shape == hr_blur.shape
-                lr_blur = self.match_blur(lr_blur.view(N*C, 1, H//MATCH_FACTOR, W//MATCH_FACTOR)).view(N, C, H//MATCH_FACTOR, W//MATCH_FACTOR)
-                hr_blur = self.match_blur(hr_blur.view(N*C, 1, H//MATCH_FACTOR, W//MATCH_FACTOR)).view(N, C, H//MATCH_FACTOR, W//MATCH_FACTOR)
+                lr_blur = self.match_blur(lr_blur.reshape(N*C, 1, H//MATCH_FACTOR, W//MATCH_FACTOR)).reshape(N, C, H//MATCH_FACTOR, W//MATCH_FACTOR)
+                hr_blur = self.match_blur(hr_blur.reshape(N*C, 1, H//MATCH_FACTOR, W//MATCH_FACTOR)).reshape(N, C, H//MATCH_FACTOR, W//MATCH_FACTOR)
                 diff_blur = hr_blur - lr_blur
                 diff_blur = F.interpolate(
                     diff_blur, size=(H, W), mode='bilinear'

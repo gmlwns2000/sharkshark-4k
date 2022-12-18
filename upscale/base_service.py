@@ -12,8 +12,8 @@ class BaseService(metaclass=abc.ABCMeta):
     exit_on_error = False
 
     def __init__(self) -> None:
-        self.job_queue = mp.Queue(maxsize=48)
-        self.result_queue = mp.Queue(maxsize=48)
+        self.job_queue = mp.Queue(maxsize=32)
+        self.result_queue = mp.Queue(maxsize=32)
         self.cmd_queue = mp.Queue(maxsize=4096)
         self.proc = mp.Process(target=self.proc_pre_main, daemon=True)
     
@@ -70,6 +70,7 @@ class BaseService(metaclass=abc.ABCMeta):
                 raise ex
 
     def check_proc(self):
+        if not self.exit_on_error: return
         # if self.proc is not None:
         #     raise Exception('process is not started')
         if not self.proc.is_alive():
