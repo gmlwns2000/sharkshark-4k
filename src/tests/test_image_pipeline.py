@@ -2,7 +2,7 @@ import random
 import tqdm
 import os, sys, requests, logging
 import time
-import multiprocess as mp
+import multiprocessing as mp
 from multiprocessing import Pool
 
 logger = logging.getLogger("Test.ImagePipeline")
