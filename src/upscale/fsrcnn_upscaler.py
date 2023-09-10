@@ -2,10 +2,10 @@ import time, torch, cv2, gc, tqdm, math
 from wsgiref.headers import tspecials
 from matplotlib import pyplot as plt
 import numpy as np
-from upscale.model.fsrcnn.factory import build_model as build_model_fsrcnn
-from upscale.model.realesrgan.factory import build_model as build_model_esrgan
-from upscale.model.bsvd.factory import build_model as build_denoise_model
-from util.profiler import Profiler
+from .model.fsrcnn.factory import build_model as build_model_fsrcnn
+from .model.realesrgan.factory import build_model as build_model_esrgan
+from .model.bsvd.factory import build_model as build_denoise_model
+from ..util.profiler import Profiler
 import torch.nn.functional as F
 import gc
 

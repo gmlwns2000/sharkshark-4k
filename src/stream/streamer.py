@@ -2,15 +2,15 @@ from dataclasses import dataclass
 import queue, torch
 import time
 import threading
-from twitchstream.outputvideo import TwitchBufferedOutputStream, TwitchOutputStream
-from twitchstream.chat import TwitchChatStream
-from upscale.base_service import BaseService
+from ..twitchstream.outputvideo import TwitchBufferedOutputStream, TwitchOutputStream
+from ..twitchstream.chat import TwitchChatStream
+from ..upscale.base_service import BaseService
 from env_var import *
 import numpy as np
 import torch.multiprocessing as mp
 import cv2
 
-from util.profiler import Profiler
+from ..util.profiler import Profiler
 
 @dataclass
 class TwitchStreamerEntry:

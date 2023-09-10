@@ -3,9 +3,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from upscale.model.egvsr.models.networks.base_nets import BaseSequenceGenerator, BaseSequenceDiscriminator
-from upscale.model.egvsr.utils.net_utils import space_to_depth, backward_warp, get_upsampling_func
-from upscale.model.egvsr.utils.data_utils import float32_to_uint8
+from .models.networks.base_nets import BaseSequenceGenerator, BaseSequenceDiscriminator
+from .utils.net_utils import space_to_depth, backward_warp, get_upsampling_func
+from .utils.data_utils import float32_to_uint8
 
 
 # -------------------- generator modules -------------------- #

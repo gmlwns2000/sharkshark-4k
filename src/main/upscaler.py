@@ -1,6 +1,6 @@
 import argparse
-from sharkshark.pipeline import TwitchUpscalerPostStreamer
-from stream.recoder import TW_VIICHAN
+from ..sharkshark.pipeline import TwitchUpscalerPostStreamer
+from ..stream.recoder import TW_VIICHAN
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=\

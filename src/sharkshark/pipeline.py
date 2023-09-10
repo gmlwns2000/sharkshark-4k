@@ -4,11 +4,11 @@ import math
 import time, queue
 import torch
 import numpy as np
-from upscale.upscaler_base import UpscalerQueueEntry
-from upscale.egvsr_upscaler import EgvsrUpscalerService
-from upscale.fsrcnn_upscaler import FsrcnnUpscalerService
-from stream.recoder import TW_DALTA, TW_RUMYONG, TW_SHYLILY, TW_ZURURU, TwitchRecoder, TW_MARU, TW_PIANOCAT, TW_SHARK, RecoderEntry, TW_MAOU, TW_VIICHAN, TW_DANCINGSANA
-from stream.streamer import TwitchStreamer, TwitchStreamerEntry
+from ..upscale.upscaler_base import UpscalerQueueEntry
+from ..upscale.egvsr_upscaler import EgvsrUpscalerService
+from ..upscale.fsrcnn_upscaler import FsrcnnUpscalerService
+from ..stream.recoder import TW_DALTA, TW_RUMYONG, TW_SHYLILY, TW_ZURURU, TwitchRecoder, TW_MARU, TW_PIANOCAT, TW_SHARK, RecoderEntry, TW_MAOU, TW_VIICHAN, TW_DANCINGSANA
+from ..stream.streamer import TwitchStreamer, TwitchStreamerEntry
 
 class TwitchUpscalerPostStreamer:
     def __init__(self, 

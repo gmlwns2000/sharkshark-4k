@@ -4,7 +4,7 @@ import torch
 from torch import nn
 import time
 import numpy as np
-import upscale.model.bsvd.model as bsvd
+from . import model as bsvd
 from matplotlib import pyplot as plt
 
 class JitWrapper(nn.Module):

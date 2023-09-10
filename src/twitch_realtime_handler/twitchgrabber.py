@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 
 import numpy as np
-from twitch_realtime_handler.twitchhandler import (_TwitchHandlerGrabber,
-                                                 _TwitchHandlerAudio,
-                                                 _TwitchHandlerVideo)
+from .twitchhandler import (
+    _TwitchHandlerGrabber,
+    _TwitchHandlerAudio,
+    _TwitchHandlerVideo
+)
 from dataclasses import dataclass, field
 
 

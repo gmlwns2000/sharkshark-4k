@@ -148,7 +148,7 @@ class TwitchOutputStream(object):
         command.extend([
             # VIDEO CODEC PARAMETERS
             # -profile:v high444p
-            *(f'-bufsize:v 100M -c:v h264_nvenc -cq 21 -preset p7 -spatial-aq 1 -temporal-aq 1 -b_ref_mode 2 -bf 4 -rc-lookahead 20'.split()),
+            *(f'-bufsize:v 100M -c:v h264_nvenc -cq 27 -preset p7 -spatial-aq 1 -temporal-aq 1 -b_ref_mode 2 -bf 4 -rc-lookahead 20'.split()),
             # *(f'-bufsize:v 100M -c:v h264_nvenc -cq 23 -preset medium'.split()),
             # *(f'-vcodec libx264 -cq 19 -bufsize:v 100M -preset veryslow -pix_fmt yuv444p'.split()), #for static video
             # *(f'-vcodec libx264 -b:v {bitrate} -minrate:v {bitrate} -maxrate:v {bitrate} -bufsize:v {bitrate} -preset medium -crf 16 -pix_fmt yuv420p'.split()),

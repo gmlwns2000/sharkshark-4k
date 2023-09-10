@@ -9,7 +9,7 @@ from queue import Empty, Full
 import numpy as np
 import torch
 
-from util.profiler import Profiler
+from ..util.profiler import Profiler
 
 from .base_service import BaseService
 

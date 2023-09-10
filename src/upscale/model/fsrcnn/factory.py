@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-import upscale.model.fsrcnn.model as models
+from . import model as models
 
 def build_model(factor=4, device=0, input_shape=(720,1280)):
     model = models.FSRCNN(4)

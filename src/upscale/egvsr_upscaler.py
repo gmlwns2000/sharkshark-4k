@@ -2,7 +2,7 @@ import time, torch, cv2, gc, tqdm
 from wsgiref.headers import tspecials
 from matplotlib import pyplot as plt
 import numpy as np
-from upscale.model.egvsr.egvsr import FRNet
+from .model.egvsr.egvsr import FRNet
 
 torch.hub._validate_not_a_forked_repo=lambda a,b,c: True
 torch.backends.cudnn.benchmark = True

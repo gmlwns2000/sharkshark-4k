@@ -1,13 +1,15 @@
 from dataclasses import dataclass
 from queue import Empty
 import queue
-from twitch_realtime_handler import (TwitchAudioGrabber,
-                                   TwitchImageGrabber)
+from ..twitch_realtime_handler import (
+    TwitchAudioGrabber,
+    TwitchImageGrabber
+)
 import cv2, time, os
 import numpy as np
 import torch.multiprocessing as mp
 
-from util.profiler import Profiler
+from ..util.profiler import Profiler
 
 TW_SHARK = 'https://twitch.tv/tizmtizm'
 TW_MARU = 'https://www.twitch.tv/maoruya'
