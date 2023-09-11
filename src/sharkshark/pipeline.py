@@ -4,6 +4,8 @@ import math
 import time, queue
 import torch
 import numpy as np
+import multiprocessing as mp
+import multiprocessing.connection as mp_connection
 from ..upscale.upscaler_base import UpscalerQueueEntry
 from ..upscale.egvsr_upscaler import EgvsrUpscalerService
 from ..upscale.fsrcnn_upscaler import FsrcnnUpscalerService
@@ -157,9 +159,14 @@ class TwitchUpscalerPostStreamer:
         self.streamer.stop()
 
     def join(self):
-        code = self.streamer.join()
-        if code: raise Exception('streamer failed')
-        self.upscaler.join()
+        mp_connection.wait([
+            self.streamer.proc.sentinel, 
+            self.upscaler.proc.sentinel, 
+            self.recoder.proc.sentinel
+        ])
+        # code = self.streamer.join()
+        # if code: raise Exception('streamer failed')
+        # self.upscaler.join()
         self.recoder.join()
 
 if __name__ == '__main__':

@@ -52,7 +52,7 @@ class TwitchRecoder:
             del state["proc"]
         return state
 
-    def proc(self):
+    def proc_main(self):
         print('TwitchRecoder: TwitchImageGrabber init')
         image_grabber = TwitchImageGrabber(
             twitch_url=self.url,
@@ -165,7 +165,7 @@ class TwitchRecoder:
         os.kill(os.getpid(), 9)
     
     def start(self):
-        self.proc = mp.Process(target=self.proc, daemon=True)
+        self.proc = mp.Process(target=self.proc_main, daemon=True)
         self.proc.start()
     
     def get(self) -> RecoderEntry:
