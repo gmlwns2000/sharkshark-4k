@@ -2,7 +2,7 @@ import hashlib, httpx
 import io
 
 import redis
-from upscale.server.stateless_cache import RedisImageCache
+from .stateless_cache import RedisImageCache
 from fastapi import FastAPI, APIRouter, Response, UploadFile, status, HTTPException
 
 router = APIRouter()

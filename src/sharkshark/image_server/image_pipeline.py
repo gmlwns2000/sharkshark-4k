@@ -8,9 +8,9 @@ import torch.multiprocessing as mp
 import logging
 import torch, time, cv2
 import numpy as np
-from upscale.base_service import ProcessDeadException
-from upscale.fsrcnn_upscaler import FsrcnnUpscalerService, UpscalerQueueEntry
-from util.profiler import Profiler
+from ...upscale.base_service import ProcessDeadException
+from ...upscale.fsrcnn_upscaler import FsrcnnUpscalerService, UpscalerQueueEntry
+from ...util.profiler import Profiler
 import queue
 import hashlib
 from PIL import ImageFile
@@ -20,7 +20,7 @@ GifImagePlugin.LOADING_STRATEGY = GifImagePlugin.LoadingStrategy.RGB_ALWAYS
 from PIL import Image
 import flask as fl
 
-from upscale.server.stateful_cache import DiskImageCache, MemoryImageCache
+from .stateful_cache import DiskImageCache, MemoryImageCache
 logging.basicConfig()
 
 logger = logging.getLogger("ImagePipeline")

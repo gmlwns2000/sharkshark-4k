@@ -2,7 +2,7 @@ import io
 from typing import Union
 
 import redis.asyncio as redis
-from upscale.server.image_cache import *
+from .image_cache import *
 
 class LockableImageCache(ImageCache):
     def lock_file(self, filename, timeout=0):

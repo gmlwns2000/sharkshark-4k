@@ -9,7 +9,7 @@ from typing import Dict, Tuple
 from util import human_readable
 import filelock
 
-from upscale.server.image_cache import *
+from .image_cache import *
 
 logger = logging.getLogger("StatefulImageCache")
 logger.setLevel(logging.DEBUG)
