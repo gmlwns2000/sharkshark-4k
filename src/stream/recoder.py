@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from queue import Empty
 import queue
-from ..twitch_realtime_handler import (
+from .twitch_realtime_handler import (
     TwitchAudioGrabber,
     TwitchImageGrabber
 )

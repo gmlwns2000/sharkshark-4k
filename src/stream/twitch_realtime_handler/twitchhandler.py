@@ -32,13 +32,9 @@ class _TwitchHandler():
         
         if self.twitch_url is None:
             raise ValueError("No twitch_url specified")
+
         try:
             sess = Streamlink()
-            sess.set_plugin_option("twitch", "disable-ads", False)
-            sess.set_plugin_option("twitch", "low-latency", False)
-            #sess.set_option('http-proxy', 'sock5h://72.210.221.197:4145')
-            # sess.set_option('http-proxy', 'socks4://103.47.216.19:4145')
-            # sess.set_option('https-proxy', 'socks4://103.47.216.19:4145')
             stream_hls = sess.streams(self.twitch_url)
             print("TwitchHandler: Found resolutions:", stream_hls.keys())
             if (self.quality not in stream_hls) and self.quality == 'audio_only':
@@ -52,11 +48,13 @@ class _TwitchHandler():
                     self.quality = '360p'
         except streamlink.exceptions.NoPluginError:
             raise ValueError(f"No stream availabe for {self.twitch_url}")
+        
         if self.quality not in stream_hls:
             raise ValueError(f"The stream has not the given quality({self.quality}) but ({stream_hls.keys()})")
         #print(stream_hls)
+        
         if hasattr(stream_hls[self.quality], 'substreams'):
-            #print(stream_hls[self.quality].substreams)
+            print('substream', stream_hls[self.quality].substreams)
             self._stream_url = stream_hls[self.quality].substreams[0].url
         else:
             self._stream_url = stream_hls[self.quality].url

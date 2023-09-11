@@ -88,16 +88,18 @@ class TwitchImageGrabber(_TwitchHandlerVideo, _TwitchHandlerGrabber):
         self.width, self.height = self._resolution[self.quality]
         self.dtype = np.uint8
         self.get_stream_url()
-        self._cmd_pipe = ["ffmpeg",
-                          "-i", self._stream_url,
-                          #'-tune', 'fastdecode',
-                          "-threads", "32",
-                          "-f", "image2pipe",
-                          "-r", f"{self.rate}",
-                          "-pix_fmt", "rgb24",
-                          "-s", "{}x{}".format(self.width, self.height),
-                          "-vcodec", "rawvideo",
-                          "-"]
+        self._cmd_pipe = [
+            "ffmpeg",
+            "-i", self._stream_url,
+            '-tune', 'fastdecode',
+            "-threads", "32",
+            "-f", "image2pipe",
+            "-r", f"{self.rate}",
+            "-pix_fmt", "rgb24",
+            "-s", "{}x{}".format(self.width, self.height),
+            "-vcodec", "rawvideo",
+            "-"
+        ]
         print('TwitchImageGrabber cmd:', ' '.join(self._cmd_pipe))
         self._n_bytes_per_payload = self.width*self.height*3
         self._reshape_size = [self.height, self.width, 3]
