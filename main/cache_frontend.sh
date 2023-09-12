@@ -1,1 +1,0 @@
-gunicorn upscale.server.cache_frontend:app --workers 32 --worker-class uvicorn.workers.UvicornWorker --bind 0.0.0.0:8088

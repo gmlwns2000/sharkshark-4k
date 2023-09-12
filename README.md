@@ -8,8 +8,6 @@ Written by AinL.
 
 [Sample Video (https://www.youtube.com/watch?v=SXE-gIU3yJs)](https://www.youtube.com/watch?v=60-tXR3XW68)
 
-![](https://ifh.cc/g/LjbTr2.jpg)
-
 # Introduction
 
 트위치 720p에 지친 당신! 깨끗하고 선명하게 당신의 최애 방송을 보고 싶으신가요?
@@ -18,11 +16,10 @@ Written by AinL.
 
 RTX3090ti 두?장만 있다면 실시간으로 4k의 트위치 스트림을 볼 수 있답니다! 이제는 RTX4090 한장이면 충분하겠네요 (아마도)!
 
-**이거 하려고 RTX4090을 샀습니다!!!!!!!**
 ```
 # with RTX4090 + 3950x, 0.5% frame drop. 720p -> 1440p with RealESRGAN @ 24fps
 
-python -m main.upscaler --url https://www.twitch.tv/tizmtizm
+python -m src.main.upscaler --url https://www.twitch.tv/tizmtizm
 ```
 
 # Feature
