@@ -2,8 +2,8 @@ from dataclasses import dataclass
 import queue, torch
 import time
 import threading
-from .twitchstream.outputvideo import TwitchBufferedOutputStream, TwitchOutputStream
-from .twitchstream.chat import TwitchChatStream
+from .twitch_stream.output_stream import TwitchBufferedOutputStream, TwitchOutputStream
+from .twitch_stream.chat import TwitchChatStream
 from ..upscale.base_service import BaseService
 from ..util.env_var import *
 import numpy as np

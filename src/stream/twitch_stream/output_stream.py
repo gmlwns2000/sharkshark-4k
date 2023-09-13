@@ -403,8 +403,7 @@ class TwitchBufferedOutputStream(TwitchOutputStream):
 
         try:
             if frame is not None:
-                super(TwitchBufferedOutputStream, self
-                    ).send_video_frame(frame)
+                super(TwitchBufferedOutputStream, self).send_video_frame(frame)
         except OSError:
             # stream has been closed.
             # This function is still called once when that happens.
