@@ -9,7 +9,7 @@ def test_logged_in_successful():
     """
     Test TwitchChatStream._logged_in_successful
     """
-    from twitchstream.chat import TwitchChatStream
+    from twitch_stream.chat import TwitchChatStream
     res = TwitchChatStream._logged_in_successful(
         ":tmi.twitch.tv NOTICE * :Error logging in")
     assert res is False

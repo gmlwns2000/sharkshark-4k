@@ -1,15 +1,16 @@
 from dataclasses import dataclass
 from queue import Empty
 import queue
-from .twitch_realtime_handler import (
-    TwitchAudioGrabber,
-    TwitchImageGrabber
-)
 import cv2, time, os
 import numpy as np
 import torch.multiprocessing as mp
 
 from ..util.profiler import Profiler
+from .twitch_realtime_handler import (
+    TwitchAudioGrabber,
+    TwitchImageGrabber
+)
+from .youtube_recoder.image_recoder import YoutubeImageRecoder
 
 TW_SHARK = 'https://twitch.tv/tizmtizm'
 TW_MARU = 'https://www.twitch.tv/maoruya'
@@ -54,12 +55,19 @@ class TwitchRecoder:
 
     def proc_main(self):
         print('TwitchRecoder: TwitchImageGrabber init')
-        image_grabber = TwitchImageGrabber(
-            twitch_url=self.url,
-            quality=self.quality,  # quality of the stream could be ["160p", "360p", "480p", "720p", "720p60", "1080p", "1080p60"]
-            blocking=True,
-            rate=self.fps  # frame per rate (fps)
-        )
+        if 'youtube' in self.url:
+            image_grabber = YoutubeImageRecoder(
+                url=self.url,
+                quality=self.quality,
+                rate=self.fps,
+            )
+        else:
+            image_grabber = TwitchImageGrabber(
+                twitch_url=self.url,
+                quality=self.quality,  # quality of the stream could be ["160p", "360p", "480p", "720p", "720p60", "1080p", "1080p60"]
+                blocking=True,
+                rate=self.fps  # frame per rate (fps)
+            )
         
         # change to a stream that is actually online
         print('TwitchRecoder: TwitchAudioGrabber init')
