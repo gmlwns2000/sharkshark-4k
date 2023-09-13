@@ -159,7 +159,7 @@ class TwitchOutputStream(object):
 
             # AUDIO CODEC PARAMETERS
             '-acodec', 'aac', '-strict', '-2', #'-ar', '44100', '-b:a', '320k',
-            '-bufsize', '320k',
+            '-bufsize', '128k',
             #'-ac', '1',
 
             # MAP THE STREAMS
@@ -187,7 +187,7 @@ class TwitchOutputStream(object):
             stderr=devnullpipe,
             stdout=devnullpipe,
             env=my_env,
-            bufsize=1024*1024
+            bufsize=1024*1024*8
         )
 
     def __enter__(self):

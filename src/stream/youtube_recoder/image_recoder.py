@@ -54,6 +54,8 @@ class YoutubeImageRecoder:
         
         self.thread.start()
         [t.start() for t in self.workers]
+        
+        self.last_grab = 0
     
     def parse_url(self):
         from urllib.parse import urlparse, parse_qs
@@ -120,6 +122,8 @@ class YoutubeImageRecoder:
             stream_position = 0
             container = None
             container_position = 0
+            frame_index = 0
+            adjusted_frame_index = 0
             while not self.terminated:
                 while self.worker_queue.qsize() < self.worker_queue.maxsize and self.buffer_position < self.content_size:
                     self.worker_queue.put(self.buffer_position)
@@ -152,8 +156,15 @@ class YoutubeImageRecoder:
                             img = frame.to_image() # type: Image
                             img = np.array(img.convert('RGB'))
                             # print(img.shape)
+                            fps = container.streams.video[0].rate
+                            # print(fps)
                             assert img is not None
-                            self.frame_queue.put(img)
+                            assert self.rate <= fps
+                            new_adjusted_frame_index = round(frame_index / fps * self.rate)
+                            if new_adjusted_frame_index != adjusted_frame_index:
+                                self.frame_queue.put(img)
+                            adjusted_frame_index = new_adjusted_frame_index
+                            frame_index += 1
                         container_position = stream.tell()
                         if container_position > (stream_position - self.safe_buffer_size):
                             break
@@ -175,6 +186,9 @@ class YoutubeImageRecoder:
     
     def grab(self) -> np.ndarray:
         # return single frame
+        # while (time.time() - self.last_grab) < (1 / self.rate) * 0.9:
+        #     time.sleep(0.001)
+        # self.last_grab = time.time()
         return self.frame_queue.get()
     
     def terminate(self):
