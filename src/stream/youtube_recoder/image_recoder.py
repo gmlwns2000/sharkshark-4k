@@ -11,15 +11,19 @@ import requests
 import shlex
 from PIL import Image
 
+def log(*args, **kwargs):
+    print('YoutubeImageRecoder:', *args, **kwargs)
+
 class YoutubeImageRecoder:
     def __init__(self, url: str, quality: str, rate: int):
         self.url = url
         self.quality = quality
         self.rate = rate
         
-        self.buffering_chunk_counts = 8
-        self.safe_buffer_size = 500 * 1000
-        self.chunk_size = 200000 # 500KB chunk
+        self.num_workers = 16
+        self.buffering_chunk_counts = self.num_workers
+        self.safe_buffer_size = 500 * 1000 # 500KB is prefetch before start streaming
+        self.chunk_size = 200000 # 200KB chunk
         self.current_position = 0
         self.buffer_position = 0
         self.content_size = 0
@@ -37,7 +41,7 @@ class YoutubeImageRecoder:
         }[quality]
         
         self.stream_url = self.get_stream_url()
-        print(self.stream_url)
+        log(self.stream_url)
         self.parse_url()
         
         self.terminated = False
@@ -45,10 +49,11 @@ class YoutubeImageRecoder:
         self.thread = threading.Thread(target=self.proc_main, daemon=True)
         self.workers = [
             threading.Thread(target=self.worker_main, daemon=True) 
-            for _ in range(self.buffering_chunk_counts)
+            for _ in range(self.num_workers)
         ]
         
-        self.worker_queue = queue.Queue(maxsize=self.buffering_chunk_counts)
+        self.worker_retry_queue = queue.Queue() # this should not be full...
+        self.worker_queue = queue.Queue(maxsize=self.buffering_chunk_counts*2) # prefetch operations
         self.buffer_queue = queue.Queue(maxsize=self.buffering_chunk_counts)
         self.frame_queue = queue.Queue()
         
@@ -60,8 +65,13 @@ class YoutubeImageRecoder:
     def parse_url(self):
         from urllib.parse import urlparse, parse_qs
         parsed_url = urlparse(self.stream_url)
-        self.content_size = int(parse_qs(parsed_url.query)['clen'][0])
-        print('content size', self.content_size)
+        parsed_query = parse_qs(parsed_url.query)
+        if 'clen' in parsed_query:
+            self.content_size = int(parsed_query['clen'][0])
+        else:
+            res = requests.head(self.stream_url)
+            self.content_size = int(res.headers['Content-Length'])
+        log('content size', self.content_size)
     
     def get_stream_url(self):
         assert self.url is not None
@@ -69,13 +79,13 @@ class YoutubeImageRecoder:
         try:
             sess = Streamlink()
             stream_hls = sess.streams(self.url)
-            print("YoutubeImageRecoder: Found resolutions:", stream_hls.keys())
+            log("Found resolutions:", stream_hls.keys())
             if (self.quality not in stream_hls) and self.quality == 'audio_only':
                 if "audio_opus" in stream_hls:
-                    print("YoutubeImageRecoder: opus selected for audio stream")
+                    log("opus selected for audio stream")
                     self.quality = 'audio_opus'
                 elif "audio" in stream_hls:
-                    print("YoutubeImageRecoder: audio selected for audio stream")
+                    log("audio selected for audio stream")
                     self.quality = 'audio'
                 else:
                     self.quality = '360p'
@@ -84,18 +94,31 @@ class YoutubeImageRecoder:
         
         if self.quality not in stream_hls:
             raise ValueError(f"The stream has not the given quality({self.quality}) but ({stream_hls.keys()})")
-        #print(stream_hls)
+        #log(stream_hls)
         
         if hasattr(stream_hls[self.quality], 'substreams'):
-            # print('substream', stream_hls[self.quality].substreams)
+            # log('substream', stream_hls[self.quality].substreams)
             return stream_hls[self.quality].substreams[0].url
         else:
             return stream_hls[self.quality].url
     
     def worker_main(self):
-        print('worker start')
+        # log('worker: start')
         while not self.terminated:
-            start_position = self.worker_queue.get()
+            try:
+                start_position = self.worker_retry_queue.get_nowait()
+            except queue.Empty:
+                start_position = None
+            if start_position is None:
+                # if nothing to retry
+                try:
+                    start_position = self.worker_queue.get(timeout=1.0)
+                except (queue.Full, queue.Empty):
+                    continue
+            
+            if start_position == None:
+                break
+            
             end_position = start_position + self.chunk_size - 1
             content_url = self.stream_url+f'&range={int(start_position)}-{int(end_position)}'
             
@@ -107,16 +130,16 @@ class YoutubeImageRecoder:
                 # print(f'worker: retcode {res.status_code} [{len(res.content)}]')
                 self.buffer_queue.put((start_position, res.content))
             else:
-                print(f'worker: retcode {res.status_code}')
-                self.worker_queue.put(start_position)
-                self.buffer_queue.put(None)
+                log(f'worker: retcode {res.status_code}')
+                self.worker_retry_queue.put(start_position)
             
             if self.current_position >= self.content_size:
                 break
+        # log('worker: done')
     
     def proc_main(self):
         try:
-            print('main thread start')
+            log('main: thread start')
             pending_chunks = {}
             stream = io.BytesIO(b'0'*self.content_size)
             stream_position = 0
@@ -142,6 +165,7 @@ class YoutubeImageRecoder:
                     
                     stream.seek(stream_position)
                     stream.write(chunk)
+                    self.current_position += self.chunk_size
                     stream_position += len(chunk)
                     assert stream_position == stream.tell()
                     stream.seek(container_position)
@@ -152,6 +176,8 @@ class YoutubeImageRecoder:
                         if packet.size < 1:
                             continue
                         for frame in packet.decode():
+                            if isinstance(frame, av.AudioFrame):
+                                continue
                             # print(frame, stream.tell(), container_position, stream_position)
                             img = frame.to_image() # type: Image
                             img = np.array(img.convert('RGB'))
@@ -166,15 +192,14 @@ class YoutubeImageRecoder:
                             adjusted_frame_index = new_adjusted_frame_index
                             frame_index += 1
                         container_position = stream.tell()
-                        if container_position > (stream_position - self.safe_buffer_size):
+                        if (container_position > (stream_position - self.safe_buffer_size)) and self.current_position < self.content_size:
                             break
                     container_position = stream.tell()
-                    # print('demux done')
-                    
-                    self.current_position += self.chunk_size
                 
                 if self.current_position >= self.content_size:
-                    print('main thread done')
+                    log('main: thread done')
+                    for i in range(len(self.workers)):
+                        self.worker_queue.put(None)
                     self.frame_queue.put(None)
                     break
         except Exception as ex:
@@ -183,12 +208,10 @@ class YoutubeImageRecoder:
         
     def join(self):
         self.thread.join()
+        for w in self.workers:
+            w.join()
     
     def grab(self) -> np.ndarray:
-        # return single frame
-        # while (time.time() - self.last_grab) < (1 / self.rate) * 0.9:
-        #     time.sleep(0.001)
-        # self.last_grab = time.time()
         return self.frame_queue.get()
     
     def terminate(self):
@@ -198,6 +221,8 @@ if __name__ == '__main__':
     reader = YoutubeImageRecoder(
         url='https://www.youtube.com/watch?v=h5hMNF3kDm0',
         quality='1080p',
+        # url='https://www.youtube.com/watch?v=mFJzsgKoCNw',
+        # quality='720p',
         rate=24,
     )
     n = 0
@@ -207,6 +232,6 @@ if __name__ == '__main__':
         if frame is None:
             print('main: decode finished')
             break
-        print(f'main: frame {frame.shape} {n} {n/(time.time()-t)}')
+        print(f'main: frame {frame.shape} {n} {n/(time.time()-t)}\r', end='')
         n += 1
     reader.join()
