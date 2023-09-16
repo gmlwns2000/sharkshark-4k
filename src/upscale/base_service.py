@@ -34,7 +34,8 @@ class BaseService(metaclass=abc.ABCMeta):
         try:
             self.proc_init()
 
-            while True:
+            alive = True
+            while alive:
                 cmd_exit = False
                 while True:
                     try:
@@ -51,7 +52,8 @@ class BaseService(metaclass=abc.ABCMeta):
                     entry = self.proc_job_recieved(job)
                     try:
                         if self.on_queue is not None:
-                            self.on_queue(entry)
+                            alive = self.on_queue(entry)
+                            assert alive is not None
                         else:
                             self.result_queue.put_nowait(entry)
                     except Full:
@@ -60,7 +62,7 @@ class BaseService(metaclass=abc.ABCMeta):
                     time.sleep(0.001)
 
             print('BaseService.proc_main: EXIT PATTERN!')
-            os.kill(os.getpid(), 15)
+            # os.kill(os.getpid(), 15)
         except Exception as ex:
             if self.exit_on_error:
                 traceback.print_exc()

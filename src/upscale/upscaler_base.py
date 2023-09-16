@@ -44,7 +44,10 @@ class BaseUpscalerService(BaseService):
         job.profiler.end('recoder.output')
         frames = job.frames
         job.profiler.start('upscaler.upscale')
-        frames_up = self.upscale(frames)
+        if frames is not None:
+            frames_up = self.upscale(frames)
+        else:
+            frames_up = None
         job.profiler.end('upscaler.upscale')
         elapsed = time.time() - t
         job.profiler.start('upscaler.output')

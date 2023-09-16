@@ -83,7 +83,8 @@ class TwitchRecoder:
         t = time.time()
         t_sum = []
         index = 0
-        while True:
+        alive = True
+        while alive:
             try:
                 cmd = self.cmd_queue.get_nowait()
                 if cmd == 'exit':
@@ -121,7 +122,7 @@ class TwitchRecoder:
                 )
                 entry.profiler.start('recoder.output')
                 if self.on_queue is not None:
-                    self.on_queue(entry)
+                    alive = self.on_queue(entry)
                 else:
                     try:
                         self.queue.put_nowait(entry)
@@ -156,7 +157,7 @@ class TwitchRecoder:
             )
             entry.profiler.start('recoder.output')
             if self.on_queue is not None:
-                self.on_queue(entry)
+                alive = self.on_queue(entry)
             else:
                 try:
                     self.queue.put_nowait(entry)
@@ -169,8 +170,7 @@ class TwitchRecoder:
         print('TwitchRecoder: try term audio')
         audio_grabber.terminate()
         print('TwitchRecoder: exit subproc')
-
-        os.kill(os.getpid(), 9)
+        # os.kill(os.getpid(), 9)
     
     def start(self):
         self.proc = mp.Process(target=self.proc_main, daemon=True)

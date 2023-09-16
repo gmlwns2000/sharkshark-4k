@@ -19,7 +19,7 @@ class TwitchUpscalerPostStreamer:
         #device settings
         device=0, 
         #upscaler settings
-        lr_level=3, hr_level=0, upscale_method='fsrcnn', jit_mode=None,
+        lr_level=3, hr_level=0, upscale_method='realesrgan', jit_mode=None,
         #denoiser settings
         denoising=True, denoise_rate=1.0, 
         #sync
@@ -40,7 +40,7 @@ class TwitchUpscalerPostStreamer:
         # )
         self.upscaler = FsrcnnUpscalerService(
             device=self.device, lr_level=lr_level, on_queue=self.upscaler_on_queue, 
-            denoising=denoising, denoise_rate=denoise_rate, batch_size=self.small_batch_size, jit_mode=jit_mode
+            denoising=denoising, denoise_rate=denoise_rate, batch_size=self.small_batch_size, jit_mode=jit_mode, upscaler_model=upscale_method
         )
         self.recoder.output_shape = self.upscaler.lr_shape
         self.upscaler.output_shape = [
@@ -73,9 +73,12 @@ class TwitchUpscalerPostStreamer:
                     self.upscaler.push_job_nowait(new_entry)
                 else:
                     self.upscaler.push_job(new_entry)
-                raise Exception('TODO: finish pipeline until None reach to the end.')
+                # raise Exception('TODO: finish pipeline until None reach to the end.')
+                while not self.streamer.job_queue.empty():
+                    time.sleep(0.001)
             except queue.Full:
                 print("TwitchUpscalerPostStreamer: recoder output skipped")
+            return False
         else:
             small_batch_size = self.small_batch_size
             for i in range(math.ceil(len(entry.frames)/small_batch_size)):
@@ -106,6 +109,7 @@ class TwitchUpscalerPostStreamer:
                         self.upscaler.push_job(new_entry)
                 except queue.Full:
                     print("TwitchUpscalerPostStreamer: recoder output skipped")
+            return True
 
     def upscaler_on_queue(self, entry:UpscalerQueueEntry):
         # print(
@@ -115,6 +119,14 @@ class TwitchUpscalerPostStreamer:
         # )
         try:
             entry.profiler.start('upscaler.output.queue')
+            if entry.frames is None:
+                self.streamer.push_job(TwitchStreamerEntry(
+                    frames=None,
+                    audio_segments=None,
+                    step=entry.step,
+                    profiler=entry.profiler
+                ))
+                return False
             frames = entry.frames.detach().clone()#.to('cpu')
             #frames = (frames*255).to(torch.uint8)
             audio_segments = entry.audio_segment.detach().clone()#.to('cpu')
@@ -136,6 +148,7 @@ class TwitchUpscalerPostStreamer:
                 self.streamer.push_job(new_entry)
         except queue.Full:
             print("TwitchUpscalerPostStreamer: upscaler output skipped")
+        return True
     
     def streamer_on_queue(self, entry:TwitchStreamerEntry):
         # print(f'TwitchUpscalerPostStreamer: streamed, idx: {entry.step}, took: {(time.time()-self.last_streamed)*1000:.1f}ms, '+\
