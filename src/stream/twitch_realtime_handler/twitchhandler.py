@@ -57,8 +57,12 @@ class _TwitchHandler():
             print('substream', stream_hls[self.quality].substreams)
             self._stream_url = stream_hls[self.quality].substreams[0].url
         else:
+            print('url', stream_hls[self.quality].url)
             self._stream_url = stream_hls[self.quality].url
 
+        # ydl = subprocess.Popen(["youtube-dl", "-f", "best", "--get-url", self.twitch_url], stdout=subprocess.PIPE)
+        # out, err = ydl.communicate()
+        # self._stream_url = out.decode()
 
 @dataclass
 class _TwitchHandlerAudio():
@@ -86,7 +90,7 @@ class _TwitchHandlerGrabber(_TwitchHandler):
     _reshape_size: Union[list, None] = field(init=False)
     dtype: type = field(init=False)
     _terminate: bool = False
-    _ffmpeg_thread: Union[Thread, None] = field(init=False)
+    _ffmpeg_thread: Union[Thread, None] = None
     _auto_start: bool = True
 
     def __post_init__(self):
@@ -94,7 +98,9 @@ class _TwitchHandlerGrabber(_TwitchHandler):
 
     def terminate(self):
         self._terminate = True
-        self._ffmpeg_thread.terminate()
+        if self._ffmpeg_thread is not None:
+            self._ffmpeg_thread.terminate()
+            self._ffmpeg_thread = None
 
     def _reader(self):
         """Launch the ffmpeg thread and read its output pipe
