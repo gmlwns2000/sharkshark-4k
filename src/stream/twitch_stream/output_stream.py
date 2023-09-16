@@ -144,14 +144,15 @@ class TwitchOutputStream(object):
                 '-f', 'lavfi',
                 '-i', 'anullsrc=channel_layout=stereo:sample_rate=44100'
             ])
-        bitrate = '24000k'
+        bitrate = '20000k'
         command.extend([
             # VIDEO CODEC PARAMETERS
             # -profile:v high444p
-            *(f'-bufsize:v 100M -c:v h264_nvenc -cq 21 -preset p7 -spatial-aq 1 -temporal-aq 1 -b_ref_mode 2 -bf 4 -rc-lookahead 20'.split()),
+            # *(f'-bufsize:v 100M -c:v h264_nvenc -cq 21 -preset p7 -spatial-aq 1 -temporal-aq 1 -b_ref_mode 2 -bf 4 -rc-lookahead 20'.split()),
             # *(f'-bufsize:v 100M -c:v h264_nvenc -cq 23 -preset medium'.split()),
             # *(f'-vcodec libx264 -cq 19 -bufsize:v 100M -preset veryslow -pix_fmt yuv444p'.split()), #for static video
-            # *(f'-vcodec libx264 -b:v {bitrate} -minrate:v {bitrate} -maxrate:v {bitrate} -bufsize:v {bitrate} -preset medium -crf 16 -pix_fmt yuv420p'.split()),
+            *(f'-vcodec libx264 -crf 23 -preset slow'.split()),
+            # *(f'-vcodec libx264 -b:v {bitrate} -maxrate:v {bitrate} -bufsize:v {bitrate} -preset high -crf 16 -pix_fmt yuv420p'.split()),
             '-r', '%d' % self.fps,
             '-s', '%dx%d' % (self.width, self.height),
             # '-bufsize', bitrate,
@@ -170,7 +171,7 @@ class TwitchOutputStream(object):
             '-threads', '32',
 
             # STREAM TO TWITCH
-            '-f', 'flv', '-flvflags', 'no_duration_filesize', 
+            '-f', 'flv', #'-flvflags', 'no_duration_filesize', 
             self.output_file if self.output_file is not None else self.get_closest_ingest(),
         ])
 

@@ -26,7 +26,7 @@ python -m main.upscaler --url mashup.mp4 --quality 1080p --no-frame-skips --outp
     parser.add_argument('--hr-level', type=int, default=0, help='Output scale: 1440p[default], 1800p, 2160p')
     parser.add_argument('--lr-level', type=int, default=3, help='Input processing scale: 360p, 540p, 630p, 720p[default], 900p, 1080p')
     parser.add_argument('--audio-queue', type=int, default=0, help='0 for no delay, N for N sec audio delay insert.')
-    parser.add_argument('--output-file', type=str, default='rtmp://127.0.0.1:1935/live', help='default=rtmp://127.0.0.1:1935/live')
+    parser.add_argument('--output-file', type=str, default='rtmp://127.0.0.1:1935/live/index', help='default=rtmp://127.0.0.1:1935/live')
     parser.add_argument('--no-frame-skips', action='store_true', default=False, help='prevent frame skip. for static file conversion')
 
     args = parser.parse_args()

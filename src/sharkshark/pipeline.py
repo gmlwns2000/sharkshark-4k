@@ -160,6 +160,9 @@ class TwitchUpscalerPostStreamer:
             print(json.dumps(entry.profiler.data, indent=2))
             self.last_reported = time.time()
         self.last_streamed = time.time()
+        if entry.frames is None:
+            return False
+        return True
     
     def start(self):
         self.streamer.start()
